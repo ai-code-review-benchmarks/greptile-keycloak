@@ -60,6 +60,18 @@ import static org.keycloak.protocol.oidc.grants.OAuth2GrantTypeBase.OPENID_CREDE
 
 import org.keycloak.protocol.oid4vc.issuance.OID4VCIssuerWellKnownProviderFactory;
 
+/**
+ * Tests the handling of authorization_details and credential_configuration_id in the OID4VC (OpenID for Verifiable Credentials) issuance flow.
+ * <p>
+ * Covers scenarios including:
+ * <ul>
+ *   <li>Pre-authorized code and authorization code flows with authorization_details</li>
+ *   <li>Persistence and reuse of credential identifiers within a session</li>
+ *   <li>Generation of new credential identifiers across sessions</li>
+ *   <li>Validation of error handling for invalid authorization_details combinations</li>
+ * </ul>
+ * Ensures correct behavior for credential issuance, identifier management, and error responses in OID4VC flows.
+ */
 public class OID4VCJwtAuthorizationDetailsAndCredentialIdPersistenceTest extends OID4VCIssuerEndpointTest {
 
     @Test

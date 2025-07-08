@@ -46,6 +46,17 @@ import static org.junit.Assert.*;
 import static org.keycloak.protocol.oid4vc.model.Format.SD_JWT_VC;
 import static org.keycloak.protocol.oidc.grants.OAuth2GrantTypeBase.OPENID_CREDENTIAL_TYPE;
 
+/**
+ * Tests the handling of authorization_details and SD-JWT VC format in the OID4VC (OpenID for Verifiable Credentials) issuance flow.
+ * <p>
+ * Covers scenarios including:
+ * <ul>
+ *   <li>Pre-authorized code flow with authorization_details using SD-JWT VC format</li>
+ *   <li>Validation of error handling for invalid authorization_details combinations</li>
+ *   <li>Correct issuance and identifier validation for SD-JWT credentials</li>
+ * </ul>
+ * Ensures correct behavior for SD-JWT credential issuance, identifier management, and error responses in OID4VC flows.
+ */
 public class OID4VCSdJwtAuthorizationDetailsTest extends OID4VCSdJwtIssuingEndpointTest {
 
     @Test
