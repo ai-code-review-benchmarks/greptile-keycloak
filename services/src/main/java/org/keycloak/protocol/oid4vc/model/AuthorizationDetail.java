@@ -16,8 +16,14 @@
  */
 package org.keycloak.protocol.oid4vc.model;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Represents an authorization_details object in the Token Request as per OID4VCI.
@@ -33,11 +39,21 @@ public class AuthorizationDetail {
     @JsonProperty("format")
     private String format;
 
-    @JsonProperty("vct")
-    private String vct;
-
     @JsonProperty("locations")
     private List<String> locations;
+
+    @JsonIgnore
+    private Map<String, Object> additionalFields = new HashMap<>();
+
+    @JsonAnyGetter
+    public Map<String, Object> getAdditionalFields() {
+        return additionalFields;
+    }
+
+    @JsonAnySetter
+    public void setAdditionalField(String name, Object value) {
+        this.additionalFields.put(name, value);
+    }
 
     public String getType() {
         return type;
@@ -61,14 +77,6 @@ public class AuthorizationDetail {
 
     public void setFormat(String format) {
         this.format = format;
-    }
-
-    public String getVct() {
-        return vct;
-    }
-
-    public void setVct(String vct) {
-        this.vct = vct;
     }
 
     public List<String> getLocations() {
