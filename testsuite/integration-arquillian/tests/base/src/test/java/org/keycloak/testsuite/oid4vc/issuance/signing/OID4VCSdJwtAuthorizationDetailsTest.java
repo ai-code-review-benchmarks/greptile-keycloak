@@ -47,7 +47,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.keycloak.protocol.oid4vc.issuance.Oid4vciAuthorizationDetailsProcessor.OPENID_CREDENTIAL_TYPE;
+import static org.keycloak.protocol.oid4vc.issuance.OID4VCAuthorizationDetailsProcessor.OPENID_CREDENTIAL_TYPE;
 import static org.keycloak.protocol.oid4vc.model.Format.SD_JWT_VC;
 
 /**
@@ -114,7 +114,9 @@ public class OID4VCSdJwtAuthorizationDetailsTest extends OID4VCSdJwtIssuingEndpo
         AuthorizationDetail authDetail = new AuthorizationDetail();
         authDetail.setType(OPENID_CREDENTIAL_TYPE);
         authDetail.setCredentialConfigurationId("test-credential");
+        authDetail.setLocations(Collections.singletonList(ctx.credentialIssuer.getCredentialIssuer()));
         authDetail.setFormat(SD_JWT_VC); // Invalid: format should not be combined with credential_configuration_id
+        authDetail.getAdditionalFields().put("vct", "https://credentials.example.com/test-credential");
 
         List<AuthorizationDetail> authDetails = List.of(authDetail);
         String authDetailsJson = JsonSerialization.writeValueAsString(authDetails);
@@ -143,9 +145,8 @@ public class OID4VCSdJwtAuthorizationDetailsTest extends OID4VCSdJwtIssuingEndpo
         AuthorizationDetail authDetail = new AuthorizationDetail();
         authDetail.setType(OPENID_CREDENTIAL_TYPE);
         authDetail.setFormat(SD_JWT_VC);
-        if (ctx.credentialIssuer.getAuthorizationServers() != null && !ctx.credentialIssuer.getAuthorizationServers().isEmpty()) {
-            authDetail.setLocations(Collections.singletonList(ctx.credentialIssuer.getCredentialIssuer()));
-        }
+        authDetail.setLocations(Collections.singletonList(ctx.credentialIssuer.getCredentialIssuer()));
+        authDetail.getAdditionalFields().put("vct", "https://credentials.example.com/test-credential");
 
         List<AuthorizationDetail> authDetails = List.of(authDetail);
         String authDetailsJson = JsonSerialization.writeValueAsString(authDetails);

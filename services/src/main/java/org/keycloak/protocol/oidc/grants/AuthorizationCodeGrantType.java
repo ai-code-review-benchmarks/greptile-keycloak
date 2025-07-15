@@ -36,6 +36,7 @@ import org.keycloak.models.ClientScopeModel;
 import org.keycloak.models.ClientSessionContext;
 import org.keycloak.models.UserModel;
 import org.keycloak.models.UserSessionModel;
+import org.keycloak.protocol.oid4vc.issuance.OID4VCAuthorizationDetailsProcessor;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.protocol.oidc.TokenManager;
 import org.keycloak.protocol.oidc.utils.OAuth2Code;
@@ -50,7 +51,6 @@ import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.services.util.DPoPUtil;
 import org.keycloak.services.util.DefaultClientSessionContext;
 import org.keycloak.protocol.oid4vc.model.AuthorizationDetailResponse;
-import org.keycloak.protocol.oid4vc.issuance.Oid4vciAuthorizationDetailsProcessor;
 
 /**
  * OAuth 2.0 Authorization Code Grant
@@ -195,8 +195,8 @@ public class AuthorizationCodeGrantType extends OAuth2GrantTypeBase {
         String scopeParam = codeData.getScope();
         ClientSessionContext clientSessionCtx = DefaultClientSessionContext.fromClientSessionAndScopeParameter(clientSession, scopeParam, session);
 
-        // OID4VCI: Process authorization_details using the new processor
-        Oid4vciAuthorizationDetailsProcessor oid4vciProcessor = new Oid4vciAuthorizationDetailsProcessor(session, event, formParams, cors);
+        // OID4VCI: Process authorization_details using the processor
+        OID4VCAuthorizationDetailsProcessor oid4vciProcessor = new OID4VCAuthorizationDetailsProcessor(session, event, formParams, cors);
         List<AuthorizationDetailResponse> authorizationDetailsResponse = oid4vciProcessor.process(userSession, clientSessionCtx);
 
         updateClientSession(clientSession);
@@ -216,16 +216,16 @@ public class AuthorizationCodeGrantType extends OAuth2GrantTypeBase {
         clientSessionCtx.setAttribute(OIDCLoginProtocol.NONCE_PARAM, codeData.getNonce());
 
         // Store authorization_details_response in ClientSessionContext
-        clientSessionCtx.setAttribute(Oid4vciAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_RESPONSE_KEY, authorizationDetailsResponse);
+        clientSessionCtx.setAttribute(OID4VCAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_RESPONSE_KEY, authorizationDetailsResponse);
 
         return createTokenResponse(user, userSession, clientSessionCtx, scopeParam, true, s -> {return new TokenResponseContext(formParams, parseResult, clientSessionCtx, s);});
     }
 
     @Override
     protected void addCustomTokenResponseClaims(AccessTokenResponse res, ClientSessionContext clientSessionCtx) {
-        List<AuthorizationDetailResponse> authDetailsResponse = clientSessionCtx.getAttribute(Oid4vciAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_RESPONSE_KEY, List.class);
+        List<AuthorizationDetailResponse> authDetailsResponse = clientSessionCtx.getAttribute(OID4VCAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_RESPONSE_KEY, List.class);
         if (authDetailsResponse != null) {
-            res.setOtherClaims(Oid4vciAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_PARAM, authDetailsResponse);
+            res.setOtherClaims(OID4VCAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_PARAM, authDetailsResponse);
         }
     }
 

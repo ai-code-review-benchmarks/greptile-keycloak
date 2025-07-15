@@ -31,6 +31,7 @@ import org.keycloak.models.AuthenticatedClientSessionModel;
 import org.keycloak.models.ClientSessionContext;
 import org.keycloak.models.Constants;
 import org.keycloak.models.KeycloakSession;
+import org.keycloak.protocol.oid4vc.issuance.OID4VCAuthorizationDetailsProcessor;
 import org.keycloak.protocol.oid4vc.model.AuthorizationDetailResponse;
 import org.keycloak.protocol.oidc.TokenManager;
 import org.keycloak.protocol.oidc.utils.OAuth2Code;
@@ -41,7 +42,6 @@ import org.keycloak.representations.AccessTokenResponse;
 import org.keycloak.services.CorsErrorResponseException;
 import org.keycloak.services.util.DefaultClientSessionContext;
 import org.keycloak.utils.MediaType;
-import org.keycloak.protocol.oid4vc.issuance.Oid4vciAuthorizationDetailsProcessor;
 
 import java.util.List;
 import java.util.UUID;
@@ -104,8 +104,8 @@ public class PreAuthorizedCodeGrantType extends OAuth2GrantTypeBase {
                 sessionContext).accessToken(accessToken);
 
         // OID4VCI: Process authorization_details using the processor
-        if (formParams.containsKey(Oid4vciAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_PARAM)) {
-            Oid4vciAuthorizationDetailsProcessor oid4vciProcessor = new Oid4vciAuthorizationDetailsProcessor(session, event, formParams, cors);
+        if (formParams.containsKey(OID4VCAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_PARAM)) {
+            OID4VCAuthorizationDetailsProcessor oid4vciProcessor = new OID4VCAuthorizationDetailsProcessor(session, event, formParams, cors);
             List<AuthorizationDetailResponse> authorizationDetailsResponse = oid4vciProcessor.process(clientSession.getUserSession(), sessionContext);
 
             AccessTokenResponse tokenResponse;
@@ -122,7 +122,7 @@ public class PreAuthorizedCodeGrantType extends OAuth2GrantTypeBase {
 
             // If authorization_details is present, add it to otherClaims
             if (authorizationDetailsResponse != null) {
-                tokenResponse.setOtherClaims(Oid4vciAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_PARAM, authorizationDetailsResponse);
+                tokenResponse.setOtherClaims(OID4VCAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_PARAM, authorizationDetailsResponse);
                 event.success();
                 return cors.allowAllOrigins().add(Response.ok(tokenResponse).type(MediaType.APPLICATION_JSON_TYPE));
             }

@@ -59,7 +59,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assert.assertNotEquals;
-import static org.keycloak.protocol.oid4vc.issuance.Oid4vciAuthorizationDetailsProcessor.OPENID_CREDENTIAL_TYPE;
+import static org.keycloak.protocol.oid4vc.issuance.OID4VCAuthorizationDetailsProcessor.OPENID_CREDENTIAL_TYPE;
 import static org.keycloak.protocol.oid4vc.model.Format.JWT_VC;
 
 import org.keycloak.protocol.oid4vc.issuance.OID4VCIssuerWellKnownProviderFactory;
@@ -127,7 +127,7 @@ public class OID4VCJwtAuthorizationDetailsAndCredentialIdPersistenceTest extends
 
         Oid4vcTestContext ctx = prepareOid4vcTestContext(token);
 
-        // 5. Prepare authorization_details with credential_configuration_id
+        // Prepare authorization_details with credential_configuration_id
         AuthorizationDetail authDetail = new AuthorizationDetail();
         authDetail.setType(OPENID_CREDENTIAL_TYPE);
         authDetail.setCredentialConfigurationId("test-credential");
@@ -135,7 +135,7 @@ public class OID4VCJwtAuthorizationDetailsAndCredentialIdPersistenceTest extends
         List<AuthorizationDetail> authDetails = List.of(authDetail);
         String authDetailsJson = JsonSerialization.writeValueAsString(authDetails);
 
-        // 6. Get an access token with authorization_details
+        // Get an access token with authorization_details
         HttpPost postPreAuthorizedCode = new HttpPost(ctx.openidConfig.getTokenEndpoint());
         List<NameValuePair> parameters = new LinkedList<>();
         parameters.add(new BasicNameValuePair(OAuth2Constants.GRANT_TYPE, PreAuthorizedCodeGrantTypeFactory.GRANT_TYPE));
@@ -146,7 +146,7 @@ public class OID4VCJwtAuthorizationDetailsAndCredentialIdPersistenceTest extends
         try (CloseableHttpResponse tokenResponse = httpClient.execute(postPreAuthorizedCode)) {
             assertEquals(HttpStatus.SC_OK, tokenResponse.getStatusLine().getStatusCode());
 
-            // 7. Read the response body
+            // Read the response body
             String responseBody = IOUtils.toString(tokenResponse.getEntity().getContent(), StandardCharsets.UTF_8);
 
             // Parse authorization_details
@@ -170,7 +170,7 @@ public class OID4VCJwtAuthorizationDetailsAndCredentialIdPersistenceTest extends
             // Extract access token
             String a_token = getAccessToken(responseBody);
 
-            // 8. Request the credential
+            // Request the credential
             ctx.credentialsOffer.getCredentialConfigurationIds().stream()
                     .map(offeredCredentialId -> ctx.credentialIssuer.getCredentialsSupported().get(offeredCredentialId))
                     .forEach(supportedCredential -> {
@@ -189,7 +189,7 @@ public class OID4VCJwtAuthorizationDetailsAndCredentialIdPersistenceTest extends
 
         Oid4vcTestContext ctx = prepareOid4vcTestContext(token);
 
-        // 5. Prepare invalid authorization_details
+        // Prepare invalid authorization_details
         AuthorizationDetail authDetail = new AuthorizationDetail();
         authDetail.setType(OPENID_CREDENTIAL_TYPE);
         authDetail.setCredentialConfigurationId("test-credential");
@@ -197,7 +197,7 @@ public class OID4VCJwtAuthorizationDetailsAndCredentialIdPersistenceTest extends
         List<AuthorizationDetail> authDetails = List.of(authDetail);
         String authDetailsJson = JsonSerialization.writeValueAsString(authDetails);
 
-        // 6. Attempt to get an access token with invalid authorization_details
+        // Attempt to get an access token with invalid authorization_details
         HttpPost postPreAuthorizedCode = new HttpPost(ctx.openidConfig.getTokenEndpoint());
         List<NameValuePair> parameters = new LinkedList<>();
         parameters.add(new BasicNameValuePair(OAuth2Constants.GRANT_TYPE, PreAuthorizedCodeGrantTypeFactory.GRANT_TYPE));
