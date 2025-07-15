@@ -34,6 +34,7 @@ import org.keycloak.services.CorsErrorResponseException;
 import org.keycloak.services.cors.Cors;
 import org.keycloak.util.JsonSerialization;
 import org.keycloak.protocol.oid4vc.model.Format;
+import static org.keycloak.protocol.oid4vc.model.Format.SUPPORTED_FORMATS;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -65,7 +66,7 @@ public class OID4VCAuthorizationDetailsProcessor {
         }
 
         List<AuthorizationDetail> authDetails = parseAuthorizationDetails(authorizationDetailsParam);
-        List<String> supportedFormats = OID4VCIssuerWellKnownProvider.getSupportedFormats(session);
+        List<String> supportedFormats = new ArrayList<>(SUPPORTED_FORMATS);
         Map<String, SupportedCredentialConfiguration> supportedCredentials = OID4VCIssuerWellKnownProvider.getSupportedCredentials(session);
         List<AuthorizationDetailResponse> authDetailsResponse = new ArrayList<>();
 
