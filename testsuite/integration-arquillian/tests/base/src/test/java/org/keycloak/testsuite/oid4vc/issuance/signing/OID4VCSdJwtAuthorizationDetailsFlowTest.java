@@ -213,7 +213,6 @@ public class OID4VCSdJwtAuthorizationDetailsFlowTest extends OID4VCSdJwtIssuingE
         authDetail.setFormat(SD_JWT_VC);
         authDetail.setLocations(Collections.singletonList(credentialIssuer.getCredentialIssuer()));
         String vct = sdJwtTypeCredentialClientScope.getAttributes().get(CredentialScopeModel.VCT);
-        System.err.println("vct: " + vct);
         authDetail.getAdditionalFields().put("vct", vct);
 
         List<AuthorizationDetail> authDetails = List.of(authDetail);
@@ -289,7 +288,6 @@ public class OID4VCSdJwtAuthorizationDetailsFlowTest extends OID4VCSdJwtIssuingE
         authDetail.setFormat(SD_JWT_VC); // Invalid: format should not be combined with credential_configuration_id
         authDetail.setLocations(Collections.singletonList(credentialIssuer.getCredentialIssuer()));
         String vct = sdJwtTypeCredentialClientScope.getAttributes().get(CredentialScopeModel.VCT);
-        System.err.println("vct: " + vct);
         authDetail.getAdditionalFields().put("vct", vct);
 
         List<AuthorizationDetail> authDetails = List.of(authDetail);
