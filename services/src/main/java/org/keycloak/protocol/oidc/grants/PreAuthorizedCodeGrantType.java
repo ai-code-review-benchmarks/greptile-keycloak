@@ -46,6 +46,8 @@ import org.keycloak.utils.MediaType;
 import java.util.List;
 import java.util.UUID;
 
+import static org.keycloak.OAuth2Constants.AUTHORIZATION_DETAILS_PARAM;
+
 public class PreAuthorizedCodeGrantType extends OAuth2GrantTypeBase {
 
     private static final Logger LOGGER = Logger.getLogger(PreAuthorizedCodeGrantType.class);
@@ -104,7 +106,7 @@ public class PreAuthorizedCodeGrantType extends OAuth2GrantTypeBase {
                 sessionContext).accessToken(accessToken);
 
         // OID4VCI: Process authorization_details using the processor
-        if (formParams.containsKey(OID4VCAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_PARAM)) {
+        if (formParams.containsKey(AUTHORIZATION_DETAILS_PARAM)) {
             OID4VCAuthorizationDetailsProcessor oid4vciProcessor = new OID4VCAuthorizationDetailsProcessor(session, event, formParams, cors);
             List<AuthorizationDetailResponse> authorizationDetailsResponse = oid4vciProcessor.process(clientSession.getUserSession(), sessionContext);
 
@@ -122,7 +124,7 @@ public class PreAuthorizedCodeGrantType extends OAuth2GrantTypeBase {
 
             // If authorization_details is present, add it to otherClaims
             if (authorizationDetailsResponse != null) {
-                tokenResponse.setOtherClaims(OID4VCAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_PARAM, authorizationDetailsResponse);
+                tokenResponse.setOtherClaims(AUTHORIZATION_DETAILS_PARAM, authorizationDetailsResponse);
                 event.success();
                 return cors.allowAllOrigins().add(Response.ok(tokenResponse).type(MediaType.APPLICATION_JSON_TYPE));
             }

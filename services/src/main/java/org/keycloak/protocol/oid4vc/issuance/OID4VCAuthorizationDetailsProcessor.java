@@ -34,22 +34,23 @@ import org.keycloak.services.CorsErrorResponseException;
 import org.keycloak.services.cors.Cors;
 import org.keycloak.util.JsonSerialization;
 import org.keycloak.protocol.oid4vc.model.Format;
+
 import static org.keycloak.protocol.oid4vc.model.Format.SUPPORTED_FORMATS;
+import static org.keycloak.OAuth2Constants.AUTHORIZATION_DETAILS_PARAM;
+import static org.keycloak.OAuth2Constants.AUTHORIZATION_DETAILS_RESPONSE_KEY;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public class OID4VCAuthorizationDetailsProcessor {
+public class OID4VCAuthorizationDetailsProcessor implements AuthorizationDetailsProcessor {
     private static final Logger logger = Logger.getLogger(OID4VCAuthorizationDetailsProcessor.class);
     private final KeycloakSession session;
     private final EventBuilder event;
     private final MultivaluedMap<String, String> formParams;
     private final Cors cors;
 
-    public static final String AUTHORIZATION_DETAILS_PARAM = "authorization_details";
-    public static final String AUTHORIZATION_DETAILS_RESPONSE_KEY = "authorization_details_response";
     public static final String OPENID_CREDENTIAL_TYPE = "openid_credential";
 
     public OID4VCAuthorizationDetailsProcessor(KeycloakSession session, EventBuilder event, MultivaluedMap<String, String> formParams, Cors cors) {
