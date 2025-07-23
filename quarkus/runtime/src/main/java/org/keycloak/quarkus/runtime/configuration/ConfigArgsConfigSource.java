@@ -18,8 +18,6 @@
 package org.keycloak.quarkus.runtime.configuration;
 
 import static org.keycloak.quarkus.runtime.cli.Picocli.ARG_SHORT_PREFIX;
-import static org.keycloak.quarkus.runtime.configuration.Configuration.OPTION_PART_SEPARATOR_CHAR;
-import static org.keycloak.quarkus.runtime.configuration.MicroProfileConfigProvider.NS_KEYCLOAK_PREFIX;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,7 +31,6 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import io.smallrye.config.ConfigValue;
 import io.smallrye.config.PropertiesConfigSource;
 
 import org.keycloak.quarkus.runtime.cli.command.Main;
@@ -105,40 +102,15 @@ public class ConfigArgsConfigSource extends PropertiesConfigSource {
         return result;
     }
 
-    @Override
-    public ConfigValue getConfigValue(String propertyName) {
-        ConfigValue value = super.getConfigValue(propertyName);
-
-        if (value != null) {
-            return value;
-        }
-
-        return super.getConfigValue(propertyName.replace(OPTION_PART_SEPARATOR_CHAR, '.'));
-    }
-
     private static Map<String, String> parseArguments() {
         Map<String, String> properties = new HashMap<>();
 
         parseConfigArgs(getAllCliArgs(), new BiConsumer<String, String>() {
             @Override
             public void accept(String key, String value) {
-                key = NS_KEYCLOAK_PREFIX + key.substring(2);
-
-                properties.put(key, value);
-
-                PropertyMapper<?> mapper = PropertyMappers.getMapper(key);
-
-                if (mapper != null) {
-                    mapper = mapper.forKey(key);
-
-                    String to = mapper.getTo();
-
-                    if (to != null) {
-                        properties.put(mapper.getTo(), value);
-                    }
-
-                    properties.put(mapper.getFrom(), value);
-                }
+                PropertyMappers.getKcKeyFromCliKey(key).ifPresent(s -> {
+                    properties.put(s, value);
+                });
             }
         }, ignored -> {});
 
@@ -164,7 +136,7 @@ public class ConfigArgsConfigSource extends PropertiesConfigSource {
                     unaryConsumer.accept(arg);
                     continue;
                 }
-                PropertyMapper<?> mapper = PropertyMappers.getMapper(key);
+                PropertyMapper<?> mapper = PropertyMappers.getMapperByCliKey(key);
                 // the weaknesses here:
                 // - needs to know all of the short name options that accept a value
                 // - Even though We've explicitly disabled PosixClusteredShortOptionsAllowed, it may not know all of the picocli parsing rules.

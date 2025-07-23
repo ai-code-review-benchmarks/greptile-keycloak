@@ -52,6 +52,7 @@ export async function assertAuthorizationUrl(page: Page) {
 type UrlType =
   | "authorization"
   | "token"
+  | "tokenIntrospection"
   | "singleSignOnService"
   | "singleLogoutService";
 
@@ -82,21 +83,21 @@ async function assertElementExists(
   exist: boolean = true,
 ) {
   if (exist) {
-    expect(page.locator(locator)).toBeVisible();
+    await expect(page.locator(locator)).toBeVisible();
   } else {
-    expect(page.locator(locator)).not.toBeVisible();
+    await expect(page.locator(locator)).toBeHidden();
   }
 }
 
 export async function assertJwksUrlExists(page: Page, exist: boolean = true) {
-  assertElementExists(page, "[data-testid='config.jwksUrl']", exist);
+  await assertElementExists(page, "[data-testid='config.jwksUrl']", exist);
 }
 
 export async function assertPkceMethodExists(
   page: Page,
   exist: boolean = true,
 ) {
-  assertElementExists(page, "#pkceMethod", exist);
+  await assertElementExists(page, "#config\\.pkceMethod", exist);
 }
 
 export async function goToMappersTab(page: Page) {

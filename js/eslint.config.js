@@ -66,7 +66,6 @@ export default tseslint.config(
       "@typescript-eslint/no-dynamic-delete": "off",
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-extraneous-class": "off",
-      "@typescript-eslint/no-floating-promises": "off",
       "@typescript-eslint/no-inferrable-types": "off",
       "@typescript-eslint/no-invalid-void-type": "off",
       "@typescript-eslint/no-misused-promises": "off",
@@ -138,7 +137,7 @@ export default tseslint.config(
   },
   {
     ...playwright.configs["flat/recommended"],
-    files: ["apps/account-ui/test/**"],
+    files: ["apps/account-ui/test/**", "apps/admin-ui/test/**"],
   },
   {
     files: ["libs/keycloak-admin-client/test/**"],

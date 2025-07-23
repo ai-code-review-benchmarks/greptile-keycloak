@@ -90,6 +90,7 @@ public class AuthenticationProcessor {
     public static final String LAST_PROCESSED_EXECUTION = "last.processed.execution";
     public static final String CURRENT_FLOW_PATH = "current.flow.path";
     public static final String FORKED_FROM = "forked.from";
+    public static final String LAST_AUTHN_CREDENTIAL = "last.authn.credential";
 
     public static final String BROKER_SESSION_ID = "broker.session.id";
     public static final String BROKER_USER_ID = "broker.user.id";
@@ -406,6 +407,14 @@ public class AuthenticationProcessor {
 
         @Override
         public void success() {
+            success(null);
+        }
+
+        @Override
+        public void success(String credentialType) {
+            if (credentialType != null) {
+                getAuthenticationSession().setAuthNote(LAST_AUTHN_CREDENTIAL, credentialType);
+            }
             this.status = FlowStatus.SUCCESS;
         }
 
@@ -1135,7 +1144,7 @@ public class AuthenticationProcessor {
             if (userSession == null) {
                 UserSessionModel.SessionPersistenceState persistenceState = UserSessionModel.SessionPersistenceState.fromString(authSession.getClientNote(AuthenticationManager.USER_SESSION_PERSISTENT_STATE));
 
-                userSession = new UserSessionManager(session).createUserSession(authSession.getParentSession().getId(), realm, authSession.getAuthenticatedUser(), username, connection.getRemoteAddr(), authSession.getProtocol()
+                userSession = new UserSessionManager(session).createUserSession(authSession.getParentSession().getId(), realm, authSession.getAuthenticatedUser(), username, connection.getRemoteHost(), authSession.getProtocol()
                         , remember, brokerSessionId, brokerUserId, persistenceState);
 
                 if (isLightweightUser(userSession.getUser())) {
@@ -1143,7 +1152,7 @@ public class AuthenticationProcessor {
                     lua.setOwningUserSessionId(userSession.getId());
                 }
             } else if (userSession.getUser() == null || !AuthenticationManager.isSessionValid(realm, userSession)) {
-                userSession.restartSession(realm, authSession.getAuthenticatedUser(), username, connection.getRemoteAddr(), authSession.getProtocol()
+                userSession.restartSession(realm, authSession.getAuthenticatedUser(), username, connection.getRemoteHost(), authSession.getProtocol()
                         , remember, brokerSessionId, brokerUserId);
             } else {
                 // We have existing userSession even if it wasn't attached to authenticator. Could happen if SSO authentication was ignored (eg. prompt=login) and in some other cases.
@@ -1162,13 +1171,20 @@ public class AuthenticationProcessor {
             event.detail(Details.REMEMBER_ME, "true");
         }
 
-        final int clientSessions = userSession.getAuthenticatedClientSessions().size();
-        ClientSessionContext clientSessionCtx = TokenManager.attachAuthenticationSession(session, userSession, authSession);
-        if (clientSessions == 0 && userSession.getStarted() == userSession.getLastSessionRefresh()
-                && TokenUtil.hasScope(clientSessionCtx.getScopeString(), OAuth2Constants.OFFLINE_ACCESS)) {
-            // user session is just created, empty and the first access was for offline token, set the note
-            clientSessionCtx.getClientSession().setNote(FIRST_OFFLINE_ACCESS, Boolean.TRUE.toString());
+        ClientSessionContext clientSessionCtx;
+        if (userSession.getStarted() == userSession.getLastSessionRefresh()) {
+            // calling getAuthenticatedClientSessions() will pull all client sessions and is therefore expensive.
+            // The nested ifs try to avoid the common case when the session already exists for some time and this is then called.
+            final int clientSessions = userSession.getAuthenticatedClientSessions().size();
+            clientSessionCtx = TokenManager.attachAuthenticationSession(session, userSession, authSession);
+            if (clientSessions == 0 && TokenUtil.hasScope(clientSessionCtx.getScopeString(), OAuth2Constants.OFFLINE_ACCESS)) {
+                // user session is just created, empty and the first access was for offline token, set the note
+                clientSessionCtx.getClientSession().setNote(FIRST_OFFLINE_ACCESS, Boolean.TRUE.toString());
+            } else {
+                clientSessionCtx.getClientSession().removeNote(FIRST_OFFLINE_ACCESS);
+            }
         } else {
+            clientSessionCtx = TokenManager.attachAuthenticationSession(session, userSession, authSession);
             clientSessionCtx.getClientSession().removeNote(FIRST_OFFLINE_ACCESS);
         }
 

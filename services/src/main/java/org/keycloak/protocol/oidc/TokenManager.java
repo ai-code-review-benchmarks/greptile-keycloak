@@ -22,6 +22,7 @@ import java.util.HashMap;
 import org.jboss.logging.Logger;
 import org.keycloak.broker.oidc.OIDCIdentityProviderConfig;
 import org.keycloak.common.Profile.Feature;
+import org.keycloak.common.util.SecretGenerator;
 import org.keycloak.http.HttpRequest;
 import org.keycloak.OAuth2Constants;
 import org.keycloak.OAuthErrorException;
@@ -195,14 +196,8 @@ public class TokenManager {
         ClientModel client = session.getContext().getClient();
         AuthenticatedClientSessionModel clientSession = userSession.getAuthenticatedClientSessionByClient(client.getId());
 
-        // Can theoretically happen in cross-dc environment. Try to see if userSession with our client is available in remoteCache
         if (clientSession == null) {
-            userSession = session.sessions().getUserSessionIfClientExists(realm, userSession.getId(), offline, client.getId());
-            if (userSession != null) {
-                clientSession = userSession.getAuthenticatedClientSessionByClient(client.getId());
-            } else {
-                throw new OAuthErrorException(OAuthErrorException.INVALID_GRANT, "Session doesn't have required client", "Session doesn't have required client");
-            }
+            throw new OAuthErrorException(OAuthErrorException.INVALID_GRANT, "Session doesn't have required client", "Session doesn't have required client");
         }
 
         if (!AuthenticationManager.isClientSessionValid(realm, client, userSession, clientSession)) {
@@ -251,98 +246,6 @@ public class TokenManager {
         AccessToken newToken = createClientAccessToken(session, realm, client, user, userSession, clientSessionCtx);
 
         return new TokenValidation(user, userSession, clientSessionCtx, newToken);
-    }
-
-    /**
-     * Checks if the token is valid.
-     *
-     * @param session
-     * @param realm
-     * @param token
-     * @return
-     */
-    public AccessToken checkTokenValidForIntrospection(KeycloakSession session, RealmModel realm, AccessToken token, EventBuilder eventBuilder) {
-        return getValidUserSessionIfTokenIsValid(session, realm, token, eventBuilder) != null ? token : null;
-    }
-
-    /**
-     * Checks if the token is valid and return a valid user session.
-     *
-     * @param session
-     * @param realm
-     * @param token
-     * @return
-     */
-    public UserSessionModel getValidUserSessionIfTokenIsValid(KeycloakSession session, RealmModel realm, AccessToken token, EventBuilder eventBuilder) {
-        if (token == null) {
-            return null;
-        }
-        ClientModel client = realm.getClientByClientId(token.getIssuedFor());
-        if (client == null) {
-            logger.debugf("Introspection access token : client with clientId %s does not exist", token.getIssuedFor() );
-            eventBuilder.detail(Details.REASON, String.format("Could not find client for %s", token.getIssuedFor()));
-            return null;
-        } else if (!client.isEnabled()) {
-            logger.debugf("Introspection access token : client with clientId %s is disabled", token.getIssuedFor() );
-            eventBuilder.detail(Details.REASON, String.format("Client with clientId %s is disabled", token.getIssuedFor()));
-            return null;
-        }
-
-        try {
-            TokenVerifier.createWithoutSignature(token)
-                    .withChecks(NotBeforeCheck.forModel(client), TokenVerifier.IS_ACTIVE, new TokenRevocationCheck(session))
-                    .verify();
-        } catch (VerificationException e) {
-            logger.debugf("Introspection access token for %s client: JWT check failed: %s", token.getIssuedFor(), e.getMessage());
-            eventBuilder.detail(Details.REASON, "Introspection access token for "+token.getIssuedFor() +" client: JWT check failed");
-            return null;
-        }
-
-        UserSessionModel userSession;
-        try {
-            userSession = UserSessionUtil.findValidSession(session, realm, token, eventBuilder, client);
-        } catch (Exception e) {
-            logger.debugf( "Introspection access token for " + token.getIssuedFor() + " client:" + e.getMessage());
-            eventBuilder.detail(Details.REASON,  "Introspection access token for " + token.getIssuedFor() + " client:" + e.getMessage());
-            return null;
-        }
-
-        if (!isUserValid(session, realm, token, userSession.getUser())) {
-            logger.debugf("Could not find valid user from user");
-            eventBuilder.detail(Details.REASON, "Could not find valid user from user");
-            return null;
-        }
-
-        String tokenType = token.getType();
-        if (realm.isRevokeRefreshToken()
-                && (tokenType.equals(TokenUtil.TOKEN_TYPE_REFRESH) || tokenType.equals(TokenUtil.TOKEN_TYPE_OFFLINE))
-                && !validateTokenReuseForIntrospection(session, realm, token)) {
-            logger.debugf("Introspection access token for %s client: failed to validate Token reuse for introspection", token.getIssuedFor());
-            eventBuilder.detail(Details.REASON, "Realm revoke refresh token, token type is "+tokenType+ " and token is not eligible for introspection");
-            return null;
-        }
-        return userSession;
-    }
-
-    private boolean validateTokenReuseForIntrospection(KeycloakSession session, RealmModel realm, AccessToken token) {
-        UserSessionModel userSession = null;
-        if (token.getType().equals(TokenUtil.TOKEN_TYPE_REFRESH)) {
-            userSession = session.sessions().getUserSession(realm, token.getSessionId());
-        } else {
-            UserSessionManager sessionManager = new UserSessionManager(session);
-            userSession = sessionManager.findOfflineUserSession(realm, token.getSessionId());
-        }
-
-        ClientModel client = realm.getClientByClientId(token.getIssuedFor());
-        AuthenticatedClientSessionModel clientSession = userSession.getAuthenticatedClientSessionByClient(client.getId());
-
-        try {
-            validateTokenReuse(session, realm, token, clientSession, false);
-            return true;
-        } catch (OAuthErrorException e) {
-            logger.debug("validateTokenReuseForIntrospection is false",e);
-            return false;
-        }
     }
 
     public static boolean isUserValid(KeycloakSession session, RealmModel realm, AccessToken token, UserModel user) {
@@ -503,7 +406,7 @@ public class TokenManager {
     }
 
     // Will throw OAuthErrorException if validation fails
-    private void validateTokenReuse(KeycloakSession session, RealmModel realm, AccessToken refreshToken, AuthenticatedClientSessionModel clientSession, boolean refreshFlag) throws OAuthErrorException {
+    public void validateTokenReuse(KeycloakSession session, RealmModel realm, AccessToken refreshToken, AuthenticatedClientSessionModel clientSession, boolean refreshFlag) throws OAuthErrorException {
         int startupTime = session.getProvider(UserSessionProvider.class).getStartupTime(realm);
         String key = getReuseIdKey(refreshToken);
         String refreshTokenId = clientSession.getRefreshToken(key);
@@ -563,8 +466,11 @@ public class TokenManager {
             }
 
             if (Profile.isFeatureEnabled(Profile.Feature.DPOP)) {
-                DPoP dPoP = (DPoP) session.getAttribute(DPoPUtil.DPOP_SESSION_ATTRIBUTE);
-                if (client.isPublicClient() && (OIDCAdvancedConfigWrapper.fromClientModel(client).isUseDPoP() || dPoP != null )) {
+                if (DPoPUtil.isDPoPToken(refreshToken)) {
+                    DPoP dPoP = (DPoP) session.getAttribute(DPoPUtil.DPOP_SESSION_ATTRIBUTE);
+                    if (dPoP == null) {
+                        throw new OAuthErrorException(OAuthErrorException.INVALID_GRANT, "DPoP proof is missing");
+                    }
                     try {
                         DPoPUtil.validateBinding(refreshToken, dPoP);
                     } catch (VerificationException ex) {
@@ -731,6 +637,10 @@ public class TokenManager {
         if (scopeParam == null) {
             return clientScopes;
         }
+
+        // skip scopes that were explicitly requested using the dynamic scope format
+        // we don't want dynamic and default client scopes duplicated
+        clientScopes = clientScopes.filter(scope -> !scopeParam.contains(scope.getName() + ClientScopeModel.VALUE_SEPARATOR));
 
         Map<String, ClientScopeModel> allOptionalScopes = client.getClientScopes(false);
 
@@ -1058,7 +968,7 @@ public class TokenManager {
         AccessToken token = new AccessToken();
 
         TokenContextEncoderProvider encoder = session.getProvider(TokenContextEncoderProvider.class);
-        AccessTokenContext tokenCtx = encoder.getTokenContextFromClientSessionContext(clientSessionCtx, KeycloakModelUtils.generateId());
+        AccessTokenContext tokenCtx = encoder.getTokenContextFromClientSessionContext(clientSessionCtx, SecretGenerator.getInstance().generateSecureID());
         token.id(encoder.encodeTokenId(tokenCtx));
 
         token.type(formatTokenType(client, token));
@@ -1128,8 +1038,11 @@ public class TokenManager {
             expiration = Time.currentTimeMillis() + TimeUnit.SECONDS.toMillis(tokenLifespan);
         }
 
+        final boolean offline = userSession.isOffline() || offlineTokenRequested ||
+                (userSession.getPersistenceState() == UserSessionModel.SessionPersistenceState.TRANSIENT &&
+                Constants.CREATED_FROM_PERSISTENT_OFFLINE.equals(userSession.getNote(Constants.CREATED_FROM_PERSISTENT)));
         long sessionExpires = SessionExpirationUtils.calculateClientSessionMaxLifespanTimestamp(
-                userSession.isOffline() || offlineTokenRequested, userSession.isRememberMe(),
+                offline, userSession.isRememberMe(),
                 TimeUnit.SECONDS.toMillis(clientSession.getStarted()), TimeUnit.SECONDS.toMillis(userSession.getStarted()),
                 realm, client);
         expiration = sessionExpires > 0? Math.min(expiration, sessionExpires) : expiration;
@@ -1256,23 +1169,17 @@ public class TokenManager {
             AuthenticatedClientSessionModel clientSession = clientSessionCtx.getClientSession();
             final AccessToken.Confirmation confirmation = getConfirmation(clientSession, accessToken);
             refreshToken = new RefreshToken(accessToken, confirmation);
-            refreshToken.id(KeycloakModelUtils.generateId());
+            refreshToken.id(SecretGenerator.getInstance().generateSecureID());
             refreshToken.issuedNow();
             clientSession.setTimestamp(refreshToken.getIat().intValue());
             UserSessionModel userSession = clientSession.getUserSession();
             userSession.setLastSessionRefresh(refreshToken.getIat().intValue());
             if (offlineTokenRequested) {
-                UserSessionManager sessionManager = new UserSessionManager(session);
-                if (!sessionManager.isOfflineTokenAllowed(clientSessionCtx)) {
-                    event.detail(Details.REASON, "Offline tokens not allowed for the user or client");
-                    event.error(Errors.NOT_ALLOWED);
-                    throw new ErrorResponseException(Errors.NOT_ALLOWED, "Offline tokens not allowed for the user or client", Response.Status.BAD_REQUEST);
-                }
                 refreshToken.type(TokenUtil.TOKEN_TYPE_OFFLINE);
                 if (realm.isOfflineSessionMaxLifespanEnabled()) {
                     refreshToken.exp(getExpiration(true));
                 }
-                sessionManager.createOrUpdateOfflineSession(clientSessionCtx.getClientSession(), userSession);
+                createOrUpdateOfflineSession();
             } else {
                 refreshToken.exp(getExpiration(false));
             }
@@ -1282,6 +1189,16 @@ public class TokenManager {
                         .map(ClientModel::getClientId)
                         .collect(Collectors.toSet()));
             }
+        }
+
+        public void createOrUpdateOfflineSession() {
+            UserSessionManager sessionManager = new UserSessionManager(session);
+            if (!sessionManager.isOfflineTokenAllowed(clientSessionCtx)) {
+                event.detail(Details.REASON, "Offline tokens not allowed for the user or client");
+                event.error(Errors.NOT_ALLOWED);
+                throw new ErrorResponseException(Errors.NOT_ALLOWED, "Offline tokens not allowed for the user or client", Response.Status.BAD_REQUEST);
+            }
+            sessionManager.createOrUpdateOfflineSession(clientSessionCtx.getClientSession(), userSession);
         }
 
        /**
@@ -1321,7 +1238,7 @@ public class TokenManager {
                 throw new IllegalStateException("accessToken not set");
             }
             idToken = new IDToken();
-            idToken.id(KeycloakModelUtils.generateId());
+            idToken.id(SecretGenerator.getInstance().generateSecureID());
             idToken.type(TokenUtil.TOKEN_TYPE_ID);
             idToken.subject(userSession.getUser().getId());
             idToken.audience(client.getClientId());

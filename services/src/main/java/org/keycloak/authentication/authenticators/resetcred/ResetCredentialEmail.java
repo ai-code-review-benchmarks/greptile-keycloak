@@ -126,10 +126,7 @@ public class ResetCredentialEmail implements Authenticator, AuthenticatorFactory
                     .user(user)
                     .error(Errors.EMAIL_SEND_FAILED);
             ServicesLogger.LOGGER.failedToSendPwdResetEmail(e);
-            Response challenge = context.form()
-                    .setError(Messages.EMAIL_SENT_ERROR)
-                    .createErrorPage(Response.Status.INTERNAL_SERVER_ERROR);
-            context.failure(AuthenticationFlowError.INTERNAL_ERROR, challenge);
+            context.forkWithSuccessMessage(new FormMessage(Messages.EMAIL_SENT));
         }
     }
 
@@ -247,7 +244,7 @@ public class ResetCredentialEmail implements Authenticator, AuthenticatorFactory
         final String forceLogin = config != null? config.getConfig().get(FORCE_LOGIN) : null;
         if (forceLogin == null || FEDERATED_OPTION.equalsIgnoreCase(forceLogin)) {
             // default is only-federated, return true only for federated users
-            return !StorageId.isLocalStorage(user.getId()) || user.getFederationLink() != null;
+            return !StorageId.isLocalStorage(user.getId()) || user.isFederated();
         } else if (Boolean.TRUE.toString().equalsIgnoreCase(forceLogin)) {
             return Boolean.TRUE;
         } else if (Boolean.FALSE.toString().equalsIgnoreCase(forceLogin)) {

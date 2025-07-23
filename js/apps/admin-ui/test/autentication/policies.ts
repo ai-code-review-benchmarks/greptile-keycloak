@@ -10,18 +10,16 @@ export async function assertSupportedApplications(
   page: Page,
   applications: string[],
 ) {
-  const supportedApplications = await page
-    .getByTestId("supportedApplications")
-    .textContent();
-  expect(supportedApplications).toEqual(applications.join(""));
+  const supportedApplications = page.getByTestId("supportedApplications");
+  await expect(supportedApplications).toHaveText(applications.join(""));
 }
 
 export async function setPolicyType(page: Page, type: string) {
-  page.getByTestId(type).click();
+  await page.getByTestId(type).click();
 }
 
 export async function increaseInitialCounter(page: Page) {
-  page.locator("#otpPolicyInitialCounter").getByLabel("Plus").click();
+  await page.locator("#otpPolicyInitialCounter").getByLabel("Plus").click();
 }
 
 export async function goToWebauthnPage(page: Page) {

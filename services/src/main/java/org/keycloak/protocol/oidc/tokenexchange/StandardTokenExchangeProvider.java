@@ -23,13 +23,12 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.keycloak.OAuth2Constants;
 import org.keycloak.OAuthErrorException;
+import org.keycloak.authentication.actiontoken.TokenUtils;
 import org.keycloak.common.Profile;
-import org.keycloak.common.constants.ServiceAccountConstants;
 import org.keycloak.common.util.CollectionUtil;
 import org.keycloak.events.Details;
 import org.keycloak.events.Errors;
@@ -50,8 +49,8 @@ import org.keycloak.representations.AccessTokenResponse;
 import org.keycloak.services.CorsErrorResponseException;
 import org.keycloak.services.managers.AuthenticationManager;
 import org.keycloak.services.managers.AuthenticationSessionManager;
-import org.keycloak.services.managers.UserSessionManager;
 import org.keycloak.services.util.AuthorizationContextUtil;
+import org.keycloak.services.util.UserSessionUtil;
 import org.keycloak.sessions.AuthenticationSessionModel;
 import org.keycloak.sessions.RootAuthenticationSessionModel;
 import org.keycloak.util.TokenUtil;
@@ -62,6 +61,11 @@ import org.keycloak.util.TokenUtil;
  * @author <a href="mailto:mposolda@redhat.com">Marek Posolda</a>
  */
 public class StandardTokenExchangeProvider extends AbstractTokenExchangeProvider {
+
+    @Override
+    public int getVersion() {
+        return 2;
+    }
 
     @Override
     public boolean supports(TokenExchangeContext context) {
@@ -131,7 +135,9 @@ public class StandardTokenExchangeProvider extends AbstractTokenExchangeProvider
 
         event.user(tokenUser);
         event.detail(Details.USERNAME, tokenUser.getUsername());
-        event.session(tokenSession);
+        if (tokenSession.getPersistenceState() != UserSessionModel.SessionPersistenceState.TRANSIENT) {
+            event.session(tokenSession);
+        }
         event.detail(Details.SUBJECT_TOKEN_CLIENT_ID, token.getIssuedFor());
 
         return exchangeClientToClient(tokenUser, tokenSession, token, true);
@@ -196,18 +202,13 @@ public class StandardTokenExchangeProvider extends AbstractTokenExchangeProvider
     }
 
     @Override
-    protected void setClientToContext(List<ClientModel> targetAudienceClients) {
-        // The client requesting exchange is set in the context
-        session.getContext().setClient(client);
-    }
-
-    @Override
     protected Response exchangeClientToOIDCClient(UserModel targetUser, UserSessionModel targetUserSession, String requestedTokenType,
                                                   List<ClientModel> targetAudienceClients, String scope, AccessToken subjectToken) {
         RootAuthenticationSessionModel rootAuthSession = new AuthenticationSessionManager(session).createAuthenticationSession(realm, false);
         AuthenticationSessionModel authSession = createSessionModel(targetUserSession, rootAuthSession, targetUser, client, scope);
+        boolean isOfflineSession = targetUserSession.isOffline();
 
-        if (targetUserSession == null || targetUserSession.isOffline()) {
+        if (targetUserSession.getPersistenceState() == UserSessionModel.SessionPersistenceState.TRANSIENT || isOfflineSession) {
             // if no session is associated with the subject_token or it is offline, check no online session is needed
             if (OAuth2Constants.REFRESH_TOKEN_TYPE.equals(requestedTokenType)) {
                 event.detail(Details.REASON, "Refresh token not valid as requested_token_type because creating a new session is needed");
@@ -215,16 +216,15 @@ public class StandardTokenExchangeProvider extends AbstractTokenExchangeProvider
                 throw new CorsErrorResponseException(cors, OAuthErrorException.INVALID_REQUEST,
                         "Refresh token not valid as requested_token_type because creating a new session is needed", Response.Status.BAD_REQUEST);
             }
+
             // create a transient session now for the token exchange
-            targetUserSession = new UserSessionManager(session).createUserSession(authSession.getParentSession().getId(), realm, targetUser, targetUser.getUsername(),
-                    clientConnection.getRemoteAddr(), ServiceAccountConstants.CLIENT_AUTH, false, null, null,
-                    UserSessionModel.SessionPersistenceState.TRANSIENT);
+            if (isOfflineSession) {
+                targetUserSession = UserSessionUtil.createTransientUserSession(session, targetUserSession);
+            }
         }
 
         final boolean newClientSessionCreated = targetUserSession.getPersistenceState() != UserSessionModel.SessionPersistenceState.TRANSIENT
                 && targetUserSession.getAuthenticatedClientSessionByClient(client.getId()) == null;
-
-        event.session(targetUserSession);
 
         try {
             ClientSessionContext clientSessionCtx = TokenManager.attachAuthenticationSession(this.session, targetUserSession, authSession,
@@ -248,30 +248,33 @@ public class StandardTokenExchangeProvider extends AbstractTokenExchangeProvider
             clientSessionCtx.setAttribute(Constants.GRANT_TYPE, OAuth2Constants.TOKEN_EXCHANGE_GRANT_TYPE);
 
             TokenContextEncoderProvider encoder = session.getProvider(TokenContextEncoderProvider.class);
-            AccessTokenContext subjectTokenContext = encoder.getTokenContextFromTokenId(subjectToken.getId());
 
-            //copy subject client from the client session notes if the subject token used has already been exchanged
-            if (OAuth2Constants.TOKEN_EXCHANGE_GRANT_TYPE.equals(subjectTokenContext.getGrantType())) {
-                ClientModel subjectClient = session.clients().getClientByClientId(realm, subjectToken.getIssuedFor());
-                if (subjectClient != null) {
-                    AuthenticatedClientSessionModel subjectClientSession = targetUserSession.getAuthenticatedClientSessionByClient(subjectClient.getId());
-                    if (subjectClientSession != null) {
-                        subjectClientSession.getNotes().entrySet().stream()
-                                .filter(note -> note.getKey().startsWith(Constants.TOKEN_EXCHANGE_SUBJECT_CLIENT))
-                                .forEach(note -> clientSessionCtx.getClientSession().setNote(note.getKey(), note.getValue()));
+            if (subjectToken != null) {
+                AccessTokenContext subjectTokenContext = encoder.getTokenContextFromTokenId(subjectToken.getId());
+
+                //copy subject client from the client session notes if the subject token used has already been exchanged
+                if (OAuth2Constants.TOKEN_EXCHANGE_GRANT_TYPE.equals(subjectTokenContext.getGrantType())) {
+                    ClientModel subjectClient = session.clients().getClientByClientId(realm, subjectToken.getIssuedFor());
+                    if (subjectClient != null) {
+                        AuthenticatedClientSessionModel subjectClientSession = targetUserSession.getAuthenticatedClientSessionByClient(subjectClient.getId());
+                        if (subjectClientSession != null) {
+                            subjectClientSession.getNotes().entrySet().stream()
+                                    .filter(note -> note.getKey().startsWith(Constants.TOKEN_EXCHANGE_SUBJECT_CLIENT))
+                                    .forEach(note -> clientSessionCtx.getClientSession().setNote(note.getKey(), note.getValue()));
+                        }
                     }
                 }
-            }
 
-            //store client id of the subject token
-            clientSessionCtx.getClientSession().setNote(Constants.TOKEN_EXCHANGE_SUBJECT_CLIENT + subjectToken.getIssuedFor(), subjectToken.getId());
+                //store client id of the subject token
+                clientSessionCtx.getClientSession().setNote(Constants.TOKEN_EXCHANGE_SUBJECT_CLIENT + subjectToken.getIssuedFor(), subjectToken.getId());
+            }
 
             TokenManager.AccessTokenResponseBuilder responseBuilder = tokenManager.responseBuilder(realm, client, event, session,
                     clientSessionCtx.getClientSession().getUserSession(), clientSessionCtx).generateAccessToken();
 
             checkRequestedAudiences(responseBuilder);
 
-            if (targetUserSession.getPersistenceState() == UserSessionModel.SessionPersistenceState.TRANSIENT) {
+            if (targetUserSession.getPersistenceState() == UserSessionModel.SessionPersistenceState.TRANSIENT && !isOfflineSession) {
                 responseBuilder.getAccessToken().setSessionId(null);
                 event.session((String) null);
             }
@@ -321,19 +324,13 @@ public class StandardTokenExchangeProvider extends AbstractTokenExchangeProvider
     }
 
     protected void checkRequestedAudiences(TokenManager.AccessTokenResponseBuilder responseBuilder) {
-        if (params.getAudience() != null && (responseBuilder.getAccessToken().getAudience() == null ||
-                responseBuilder.getAccessToken().getAudience().length < params.getAudience().size())) {
-            final Set<String> missingAudience = new HashSet<>(params.getAudience());
-            if (responseBuilder.getAccessToken().getAudience() != null) {
-                missingAudience.removeAll(Set.of(responseBuilder.getAccessToken().getAudience()));
-            }
-            if (!missingAudience.isEmpty()) {
-                final String missingAudienceString = CollectionUtil.join(missingAudience);
-                event.detail(Details.REASON, "Requested audience not available: " + missingAudienceString);
-                event.error(Errors.INVALID_REQUEST);
-                throw new CorsErrorResponseException(cors, OAuthErrorException.INVALID_REQUEST,
-                        "Requested audience not available: " + missingAudienceString, Response.Status.BAD_REQUEST);
-            }
+        Set<String> missingAudience = TokenUtils.checkRequestedAudiences(responseBuilder.getAccessToken(), params.getAudience());
+        if (!missingAudience.isEmpty()) {
+            final String missingAudienceString = CollectionUtil.join(missingAudience);
+            event.detail(Details.REASON, "Requested audience not available: " + missingAudienceString);
+            event.error(Errors.INVALID_REQUEST);
+            throw new CorsErrorResponseException(cors, OAuthErrorException.INVALID_REQUEST,
+                    "Requested audience not available: " + missingAudienceString, Response.Status.BAD_REQUEST);
         }
     }
 

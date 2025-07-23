@@ -31,21 +31,26 @@ import java.util.stream.Collectors;
 import org.keycloak.admin.client.resource.PermissionsResource;
 import org.keycloak.admin.client.resource.PoliciesResource;
 import org.keycloak.admin.client.resource.ScopePermissionsResource;
+import org.keycloak.authorization.fgap.AdminPermissionsSchema;
 import org.keycloak.models.Constants;
 import org.keycloak.models.utils.KeycloakModelUtils;
+import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.authorization.AbstractPolicyRepresentation;
 import org.keycloak.representations.idm.authorization.ClientPolicyRepresentation;
+import org.keycloak.representations.idm.authorization.GroupPolicyRepresentation;
 import org.keycloak.representations.idm.authorization.Logic;
+import org.keycloak.representations.idm.authorization.RolePolicyRepresentation;
 import org.keycloak.representations.idm.authorization.ScopePermissionRepresentation;
 import org.keycloak.representations.idm.authorization.UserPolicyRepresentation;
 import org.keycloak.testframework.annotations.InjectClient;
 import org.keycloak.testframework.annotations.InjectRealm;
+import org.keycloak.testframework.injection.LifeCycle;
 import org.keycloak.testframework.realm.ManagedClient;
 import org.keycloak.testframework.realm.ManagedRealm;
 
 public abstract class AbstractPermissionTest {
 
-    @InjectRealm(config = RealmAdminPermissionsConfig.class)
+    @InjectRealm(config = RealmAdminPermissionsConfig.class, lifecycle = LifeCycle.METHOD)
     ManagedRealm realm;
 
     @InjectClient(attachTo = Constants.ADMIN_PERMISSIONS_CLIENT_ID)
@@ -133,6 +138,36 @@ public abstract class AbstractPermissionTest {
         return policy;
     }
 
+    protected static GroupPolicyRepresentation createGroupPolicy(ManagedRealm realm, ManagedClient client, String name, String groupId, Logic logic) {
+        GroupPolicyRepresentation policy = new GroupPolicyRepresentation();
+        policy.setName(name);
+        policy.addGroup(groupId);
+        policy.setLogic(logic);
+        try (Response response = client.admin().authorization().policies().group().create(policy)) {
+            assertThat(response.getStatus(), equalTo(Response.Status.CREATED.getStatusCode()));
+            realm.cleanup().add(r -> {
+                String policyId = r.clients().get(client.getId()).authorization().policies().group().findByName(name).getId();
+                r.clients().get(client.getId()).authorization().policies().group().findById(policyId).remove();
+            });
+        }
+        return policy;
+    }
+
+    protected static RolePolicyRepresentation createRolePolicy(ManagedRealm realm, ManagedClient client, String name, String roleId, Logic logic) {
+        RolePolicyRepresentation policy = new RolePolicyRepresentation();
+        policy.setName(name);
+        policy.addRole(roleId);
+        policy.setLogic(logic);
+        try (Response response = client.admin().authorization().policies().role().create(policy)) {
+            assertThat(response.getStatus(), equalTo(Response.Status.CREATED.getStatusCode()));
+            realm.cleanup().add(r -> {
+                String policyId = r.clients().get(client.getId()).authorization().policies().group().findByName(name).getId();
+                r.clients().get(client.getId()).authorization().policies().group().findById(policyId).remove();
+            });
+        }
+        return policy;
+    }
+
     protected static ClientPolicyRepresentation createClientPolicy(ManagedRealm realm, ManagedClient client, String name, String... clientIds) {
         ClientPolicyRepresentation policy = new ClientPolicyRepresentation();
         policy.setName(name);
@@ -165,20 +200,23 @@ public abstract class AbstractPermissionTest {
     }
 
     protected ScopePermissionRepresentation createPermission(ManagedClient client, String resourceId, String resourceType, Set<String> scopes, AbstractPolicyRepresentation... policies) {
-        return createPermission(client, Logic.POSITIVE, resourceId, resourceType, scopes, policies);
+        return createPermission(client, Set.of(resourceId), resourceType, scopes, policies);
     }
 
-    protected ScopePermissionRepresentation createPermission(ManagedClient client, Logic logic, String resourceId, String resourceType, Set<String> scopes, AbstractPolicyRepresentation... policies) {
+    protected ScopePermissionRepresentation createPermission(ManagedClient client, Set<String> resourceIds, String resourceType, Set<String> scopes, AbstractPolicyRepresentation... policies) {
         ScopePermissionRepresentation permission = PermissionBuilder.create()
-                .logic(logic)
                 .resourceType(resourceType)
                 .scopes(scopes)
-                .resources(Set.of(resourceId))
+                .resources(resourceIds)
                 .addPolicies(Arrays.stream(policies).map(AbstractPolicyRepresentation::getName).collect(Collectors.toList()))
                 .build();
 
         createPermission(client, permission);
 
         return permission;
+    }
+
+    protected ScopePermissionRepresentation createGroupPermission(GroupRepresentation group, Set<String> scopes, UserPolicyRepresentation... policies) {
+        return createPermission(client, group.getId(), AdminPermissionsSchema.GROUPS_RESOURCE_TYPE, scopes, policies);
     }
 }

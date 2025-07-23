@@ -42,15 +42,19 @@ import org.keycloak.operator.Config;
 import org.keycloak.operator.Constants;
 import org.keycloak.operator.ContextUtils;
 import org.keycloak.operator.Utils;
+import org.keycloak.operator.crds.v2alpha1.CRDUtils;
 import org.keycloak.operator.crds.v2alpha1.deployment.Keycloak;
 import org.keycloak.operator.crds.v2alpha1.deployment.KeycloakSpec;
 import org.keycloak.operator.crds.v2alpha1.deployment.ValueOrSecret;
 import org.keycloak.operator.crds.v2alpha1.deployment.spec.CacheSpec;
 import org.keycloak.operator.crds.v2alpha1.deployment.spec.HttpManagementSpec;
+import org.keycloak.operator.crds.v2alpha1.deployment.spec.ProbeSpec;
 import org.keycloak.operator.crds.v2alpha1.deployment.spec.SchedulingSpec;
 import org.keycloak.operator.crds.v2alpha1.deployment.spec.Truststore;
 import org.keycloak.operator.crds.v2alpha1.deployment.spec.TruststoreSource;
 import org.keycloak.operator.crds.v2alpha1.deployment.spec.UnsupportedSpec;
+import org.keycloak.operator.crds.v2alpha1.deployment.spec.UpdateSpec;
+import org.keycloak.operator.update.impl.RecreateOnImageChangeUpdateLogic;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -96,8 +100,6 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
     public static final String KC_TRACING_SERVICE_NAME = "KC_TRACING_SERVICE_NAME";
     public static final String KC_TRACING_RESOURCE_ATTRIBUTES = "KC_TRACING_RESOURCE_ATTRIBUTES";
 
-    static final String JGROUPS_DNS_QUERY_PARAM = "-Djgroups.dns.query=";
-
     public static final String OPTIMIZED_ARG = "--optimized";
 
     private boolean useServiceCaCrt;
@@ -127,7 +129,7 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
     public StatefulSet desired(Keycloak primary, Context<Keycloak> context) {
         Config operatorConfig = ContextUtils.getOperatorConfig(context);
         WatchedResources watchedResources = ContextUtils.getWatchedResources(context);
- 
+
         StatefulSet baseDeployment = createBaseDeployment(primary, context, operatorConfig);
         TreeSet<String> allSecrets = new TreeSet<>();
         if (isTlsConfigured(primary)) {
@@ -144,13 +146,28 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
             watchedResources.annotateDeployment(new ArrayList<>(allSecrets), Secret.class, baseDeployment, context.getClient());
         }
 
-        var upgradeType = ContextUtils.getUpgradeType(context);
-        // empty means no existing stateful set.
-        if (upgradeType.isEmpty()) {
-            return baseDeployment;
+        // default to the new revision - will be overriden to the old one if needed
+        UpdateSpec.getRevision(primary).ifPresent(rev -> addUpdateRevisionAnnotation(rev, baseDeployment));
+
+        var existingDeployment = ContextUtils.getCurrentStatefulSet(context).orElse(null);
+
+        String serviceName = KeycloakDiscoveryServiceDependentResource.getName(primary);
+        if (existingDeployment != null) {
+            // copy the existing annotations to keep the status consistent
+            CRDUtils.findUpdateReason(existingDeployment).ifPresent(r -> baseDeployment.getMetadata().getAnnotations()
+                    .put(Constants.KEYCLOAK_UPDATE_REASON_ANNOTATION, r));
+            CRDUtils.fetchIsRecreateUpdate(existingDeployment).ifPresent(b -> baseDeployment.getMetadata()
+                    .getAnnotations().put(Constants.KEYCLOAK_RECREATE_UPDATE_ANNOTATION, b.toString()));
+            serviceName = existingDeployment.getSpec().getServiceName();
         }
 
-        var existingDeployment = ContextUtils.getCurrentStatefulSet(context).orElseThrow();
+        baseDeployment.getSpec().setServiceName(serviceName);
+
+        var updateType = ContextUtils.getUpdateType(context);
+
+        if (existingDeployment == null || updateType.isEmpty()) {
+            return baseDeployment;
+        }
 
         // version 22 changed the match labels, account for older versions
         if (!existingDeployment.isMarkedForDeletion() && !hasExpectedMatchLabels(existingDeployment, primary)) {
@@ -158,9 +175,11 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
             Log.info("Existing Deployment found with old label selector, it will be recreated");
         }
 
-        return switch (upgradeType.get()) {
-            case ROLLING -> handleRollingUpdate(baseDeployment, context);
-            case RECREATE -> handleRecreateUpdate(existingDeployment, baseDeployment, context);
+        baseDeployment.getMetadata().getAnnotations().put(Constants.KEYCLOAK_UPDATE_REASON_ANNOTATION, ContextUtils.getUpdateReason(context));
+
+        return switch (updateType.get()) {
+            case ROLLING -> handleRollingUpdate(baseDeployment, context, primary);
+            case RECREATE -> handleRecreateUpdate(existingDeployment, baseDeployment, kcContainer, context);
         };
     }
 
@@ -308,11 +327,13 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
         }
         // Set bind address as this is required for JGroups to form a cluster in IPv6 envionments
         containerBuilder.addToArgs(0, "-Djgroups.bind.address=$(%s)".formatted(POD_IP));
-        containerBuilder.addToArgs(0, getJGroupsParameter(keycloakCR));
 
         // probes
-        var protocol = isTlsConfigured(keycloakCR) ? "HTTPS" : "HTTP";
+        var protocol = isManagementHttps(keycloakCR) ? "HTTPS" : "HTTP";
         var port = HttpManagementSpec.managementPort(keycloakCR);
+        var readinessOptionalSpec = Optional.ofNullable(keycloakCR.getSpec().getReadinessProbeSpec());
+        var livenessOptionalSpec = Optional.ofNullable(keycloakCR.getSpec().getLivenessProbeSpec());
+        var startupOptionalSpec = Optional.ofNullable(keycloakCR.getSpec().getStartupProbeSpec());
         var relativePath = readConfigurationValue(Constants.KEYCLOAK_HTTP_MANAGEMENT_RELATIVE_PATH_KEY, keycloakCR, context)
                 .or(() -> readConfigurationValue(Constants.KEYCLOAK_HTTP_RELATIVE_PATH_KEY, keycloakCR, context))
                 .map(path -> !path.endsWith("/") ? path + "/" : path)
@@ -320,8 +341,8 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
 
         if (!containerBuilder.hasReadinessProbe()) {
             containerBuilder.withNewReadinessProbe()
-                .withPeriodSeconds(10)
-                .withFailureThreshold(3)
+                .withPeriodSeconds(readinessOptionalSpec.map(ProbeSpec::getProbePeriodSeconds).orElse(10))
+                .withFailureThreshold(readinessOptionalSpec.map(ProbeSpec::getProbeFailureThreshold).orElse(3))
                 .withNewHttpGet()
                 .withScheme(protocol)
                 .withNewPort(port)
@@ -331,8 +352,8 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
         }
         if (!containerBuilder.hasLivenessProbe()) {
             containerBuilder.withNewLivenessProbe()
-                .withPeriodSeconds(10)
-                .withFailureThreshold(3)
+                .withPeriodSeconds(livenessOptionalSpec.map(ProbeSpec::getProbePeriodSeconds).orElse(10))
+                .withFailureThreshold(livenessOptionalSpec.map(ProbeSpec::getProbeFailureThreshold).orElse(3))
                 .withNewHttpGet()
                 .withScheme(protocol)
                 .withNewPort(port)
@@ -342,8 +363,8 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
         }
         if (!containerBuilder.hasStartupProbe()) {
             containerBuilder.withNewStartupProbe()
-                .withPeriodSeconds(1)
-                .withFailureThreshold(600)
+                .withPeriodSeconds(startupOptionalSpec.map(ProbeSpec::getProbePeriodSeconds).orElse(1))
+                .withFailureThreshold(startupOptionalSpec.map(ProbeSpec::getProbeFailureThreshold).orElse(600))
                 .withNewHttpGet()
                 .withScheme(protocol)
                 .withNewPort(port)
@@ -370,6 +391,11 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
                 .withProtocol(Constants.KEYCLOAK_SERVICE_PROTOCOL)
             .endPort()
             .endContainer().endSpec().endTemplate().endSpec().build();
+    }
+
+    private boolean isManagementHttps(Keycloak keycloakCR) {
+        return isTlsConfigured(keycloakCR) && keycloakCR.getSpec().getAdditionalOptions().stream()
+                .noneMatch(v -> "http-management-scheme".equals(v.getName()) && "http".equals(v.getValue()));
     }
 
     private void handleScheduling(Keycloak keycloakCR, Map<String, String> labels, PodSpecFluent<?> specBuilder) {
@@ -408,9 +434,6 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
 
     }
 
-    private static String getJGroupsParameter(Keycloak keycloakCR) {
-        return JGROUPS_DNS_QUERY_PARAM + KeycloakDiscoveryServiceDependentResource.getName(keycloakCR) +"." + keycloakCR.getMetadata().getNamespace();
-    }
 
     private void addEnvVars(StatefulSet baseDeployment, Keycloak keycloakCR, TreeSet<String> allSecrets, Context<Keycloak> context) {
         var distConfigurator = ContextUtils.getDistConfigurator(context);
@@ -481,6 +504,7 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
     private List<EnvVar> getDefaultAndAdditionalEnvVars(Keycloak keycloakCR) {
         // default config values
         List<ValueOrSecret> serverConfigsList = new ArrayList<>(Constants.DEFAULT_DIST_CONFIG_LIST);
+        Set<String> defaultKeys = serverConfigsList.stream().map(ValueOrSecret::getName).collect(Collectors.toSet());
 
         // merge with the CR; the values in CR take precedence
         if (keycloakCR.getSpec().getAdditionalOptions() != null) {
@@ -491,7 +515,7 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
 
         // set env vars
         List<EnvVar> envVars = serverConfigsList.stream()
-                .map(v -> {
+                .flatMap(v -> {
                     var envBuilder = new EnvVarBuilder().withName(getKeycloakOptionEnvVarName(v.getName()));
                     var secret = v.getSecret();
                     if (secret != null) {
@@ -500,7 +524,14 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
                     } else {
                         envBuilder.withValue(v.getValue());
                     }
-                    return envBuilder.build();
+                    EnvVar mainVar = envBuilder.build();
+                    if (!defaultKeys.contains(v.getName())) {
+                        EnvVar keyVar = new EnvVarBuilder()
+                                .withName("KCKEY_" + mainVar.getName().substring(KeycloakDistConfigurator.KC_PREFIX.length()))
+                                .withValue(v.getName()).build();
+                        return Stream.of(mainVar, keyVar);
+                    }
+                    return Stream.of(mainVar);
                 })
                 .collect(Collectors.toCollection(ArrayList::new));
 
@@ -512,7 +543,7 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
         }
 
         envVars.add(new EnvVarBuilder().withName(POD_IP).withNewValueFrom().withNewFieldRef()
-                .withFieldPath("status.podIP").endFieldRef().endValueFrom().build());
+                .withFieldPath("status.podIP").withApiVersion("v1").endFieldRef().endValueFrom().build());
 
         return envVars;
     }
@@ -542,36 +573,36 @@ public class KeycloakDeploymentDependentResource extends CRUDKubernetesDependent
         }));
     }
 
-    private static StatefulSet handleRollingUpdate(StatefulSet desired, Context<Keycloak> context) {
-        // return the desired stateful set since Kubernetes does a rolling in-place upgrade by default.
-        Log.debug("Performing a rolling upgrade");
-        var builder = desired.toBuilder()
-                .editMetadata()
-                .addToAnnotations(Constants.KEYCLOAK_RECREATE_UPDATE_ANNOTATION, "false")
-                .addToAnnotations(Constants.KEYCLOAK_UPDATE_REASON_ANNOTATION, ContextUtils.getUpgradeReason(context))
-                .endMetadata();
-        return builder.build();
+    private static StatefulSet handleRollingUpdate(StatefulSet desired, Context<Keycloak> context, Keycloak primary) {
+        // return the desired stateful set since Kubernetes does a rolling in-place update by default.
+        Log.debug("Performing a rolling update");
+        desired.getMetadata().getAnnotations().put(Constants.KEYCLOAK_RECREATE_UPDATE_ANNOTATION, Boolean.FALSE.toString());
+        return desired;
     }
 
-    private static StatefulSet  handleRecreateUpdate(StatefulSet actual, StatefulSet desired, Context<Keycloak> context) {
-        if (actual.getStatus().getReplicas() == 0) {
-            Log.debug("Performing a recreate upgrade - scaling up the stateful set");
-            return desired;
+    private static StatefulSet handleRecreateUpdate(StatefulSet actual, StatefulSet desired, Container kcContainer,
+            Context<Keycloak> context) {
+        desired.getMetadata().getAnnotations().put(Constants.KEYCLOAK_RECREATE_UPDATE_ANNOTATION, Boolean.TRUE.toString());
+
+        if (Optional.ofNullable(actual.getStatus().getReplicas()).orElse(0) == 0) {
+            Log.debug("Performing a recreate update - scaling up the stateful set");
+
+            // desired state correct as is
+        } else {
+            Log.debug("Performing a recreate update - scaling down the stateful set");
+
+            // keep the old revision and image, mark as migrating, and scale down
+            CRDUtils.getRevision(actual).ifPresent(rev -> addUpdateRevisionAnnotation(rev, desired));
+            desired.getMetadata().getAnnotations().put(Constants.KEYCLOAK_MIGRATING_ANNOTATION, Boolean.TRUE.toString());
+            desired.getSpec().setReplicas(0);
+            var currentImage = RecreateOnImageChangeUpdateLogic.extractImage(actual);
+            kcContainer.setImage(currentImage);
         }
-        Log.debug("Performing a recreate upgrade - scaling down the stateful set");
-        // return the existing stateful set, but set replicas to zero
-        var builder = actual.toBuilder();
-        builder.editSpec()
-                .withReplicas(0)
-                .endSpec();
-        // update metadata from the new stateful set, it is safe to do so.
-        builder.withMetadata(desired.getMetadata());
-        builder.editMetadata()
-                .addToAnnotations(Constants.KEYCLOAK_MIGRATING_ANNOTATION, Boolean.TRUE.toString())
-                .addToAnnotations(Constants.KEYCLOAK_RECREATE_UPDATE_ANNOTATION, Boolean.TRUE.toString())
-                .addToAnnotations(Constants.KEYCLOAK_UPDATE_REASON_ANNOTATION, ContextUtils.getUpgradeReason(context))
-                .endMetadata();
-        return builder.build();
+        return desired;
+    }
+
+    private static void addUpdateRevisionAnnotation(String revision, StatefulSet toUpdate) {
+        toUpdate.getMetadata().getAnnotations().put(Constants.KEYCLOAK_UPDATE_REVISION_ANNOTATION, revision);
     }
 
 }

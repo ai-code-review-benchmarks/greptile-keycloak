@@ -14,6 +14,11 @@ import { ClusteringPanel } from "./advanced/ClusteringPanel";
 import { FineGrainOpenIdConnect } from "./advanced/FineGrainOpenIdConnect";
 import { FineGrainSamlEndpointConfig } from "./advanced/FineGrainSamlEndpointConfig";
 import { OpenIdConnectCompatibilityModes } from "./advanced/OpenIdConnectCompatibilityModes";
+import { OpenIdVerifiableCredentials } from "./advanced/OpenIdVerifiableCredentials";
+import useIsFeatureEnabled, { Feature } from "../utils/useIsFeatureEnabled";
+
+const PROTOCOL_OIDC = "openid-connect";
+const PROTOCOL_OID4VC = "oid4vc";
 
 export const parseResult = (
   result: GlobalRequestResult,
@@ -50,7 +55,7 @@ export type AdvancedProps = {
 
 export const AdvancedTab = ({ save, client }: AdvancedProps) => {
   const { t } = useTranslation();
-  const openIdConnect = "openid-connect";
+  const isFeatureEnabled = useIsFeatureEnabled();
 
   const { setValue } = useFormContext();
   const {
@@ -81,7 +86,7 @@ export const AdvancedTab = ({ save, client }: AdvancedProps) => {
           },
           {
             title: t("fineGrainOpenIdConnectConfiguration"),
-            isHidden: protocol !== openIdConnect,
+            isHidden: protocol !== PROTOCOL_OIDC,
             panel: (
               <>
                 <Text className="pf-v5-u-pb-lg">
@@ -95,6 +100,7 @@ export const AdvancedTab = ({ save, client }: AdvancedProps) => {
                       "policyUri",
                       "tosUri",
                       "access.token.signed.response.alg",
+                      "access.token.header.type.rfc9068",
                       "id.token.signed.response.alg",
                       "id.token.encrypted.response.alg",
                       "id.token.encrypted.response.enc",
@@ -117,7 +123,7 @@ export const AdvancedTab = ({ save, client }: AdvancedProps) => {
           },
           {
             title: t("openIdConnectCompatibilityModes"),
-            isHidden: protocol !== openIdConnect,
+            isHidden: protocol !== PROTOCOL_OIDC,
             panel: (
               <>
                 <Text className="pf-v5-u-pb-lg">
@@ -139,7 +145,7 @@ export const AdvancedTab = ({ save, client }: AdvancedProps) => {
           },
           {
             title: t("fineGrainSamlEndpointConfig"),
-            isHidden: protocol === openIdConnect,
+            isHidden: protocol === PROTOCOL_OIDC,
             panel: (
               <>
                 <Text className="pf-v5-u-pb-lg">
@@ -194,6 +200,24 @@ export const AdvancedTab = ({ save, client }: AdvancedProps) => {
                       "minimum.acr.value",
                     ]);
                   }}
+                />
+              </>
+            ),
+          },
+          {
+            title: t("openIdVerifiableCredentials"),
+            isHidden:
+              (protocol !== PROTOCOL_OIDC && protocol !== PROTOCOL_OID4VC) ||
+              !isFeatureEnabled(Feature.OpenId4VCI),
+            panel: (
+              <>
+                <Text className="pf-v5-u-pb-lg">
+                  {t("openIdVerifiableCredentialsHelp")}
+                </Text>
+                <OpenIdVerifiableCredentials
+                  client={client}
+                  save={save}
+                  reset={() => resetFields(["oid4vci.enabled"])}
                 />
               </>
             ),
