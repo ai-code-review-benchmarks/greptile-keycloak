@@ -23,6 +23,11 @@ import org.keycloak.protocol.oid4vc.model.AuthorizationDetailResponse;
 
 import java.util.List;
 
+/**
+ * Processor for authorization details in OID4VC issuance flow.
+ *
+ * @author <a href="mailto:Forkim.Akwichek@adorsys.com">Forkim Akwichek</a>
+ */
 public interface AuthorizationDetailsProcessor {
     List<AuthorizationDetailResponse> process(UserSessionModel userSession, ClientSessionContext clientSessionCtx);
 } 

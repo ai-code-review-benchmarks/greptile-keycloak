@@ -52,7 +52,7 @@ import org.keycloak.services.util.DPoPUtil;
 import org.keycloak.services.util.DefaultClientSessionContext;
 import org.keycloak.protocol.oid4vc.model.AuthorizationDetailResponse;
 import static org.keycloak.OAuth2Constants.AUTHORIZATION_DETAILS_PARAM;
-import static org.keycloak.OAuth2Constants.AUTHORIZATION_DETAILS_RESPONSE_KEY;
+import static org.keycloak.protocol.oid4vc.issuance.OID4VCAuthorizationDetailsProcessor.AUTHORIZATION_DETAILS_RESPONSE_KEY;
 
 /**
  * OAuth 2.0 Authorization Code Grant
@@ -198,10 +198,12 @@ public class AuthorizationCodeGrantType extends OAuth2GrantTypeBase {
         ClientSessionContext clientSessionCtx = DefaultClientSessionContext.fromClientSessionAndScopeParameter(clientSession, scopeParam, session);
 
         // OID4VCI: Process authorization_details using the processor
-        AuthorizationDetailsProcessor processor = ((OIDCLoginProtocol) context.protocol).getAuthorizationDetailsProcessor(session, event, formParams, cors);
-        List<AuthorizationDetailResponse> authorizationDetailsResponse = processor.process(userSession, clientSessionCtx);
-        if (authorizationDetailsResponse != null && !authorizationDetailsResponse.isEmpty()) {
-            clientSessionCtx.setAttribute(AUTHORIZATION_DETAILS_RESPONSE_KEY, authorizationDetailsResponse);
+        if (context.protocol instanceof OIDCLoginProtocol) {
+            AuthorizationDetailsProcessor processor = ((OIDCLoginProtocol) context.protocol).getAuthorizationDetailsProcessor(session, event, formParams, cors);
+            List<AuthorizationDetailResponse> authorizationDetailsResponse = processor.process(userSession, clientSessionCtx);
+            if (authorizationDetailsResponse != null && !authorizationDetailsResponse.isEmpty()) {
+                clientSessionCtx.setAttribute(AUTHORIZATION_DETAILS_RESPONSE_KEY, authorizationDetailsResponse);
+            }
         }
 
         updateClientSession(clientSession);

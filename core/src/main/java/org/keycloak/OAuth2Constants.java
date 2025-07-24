@@ -157,7 +157,6 @@ public interface OAuth2Constants {
     String CNF = "cnf";
 
     String AUTHORIZATION_DETAILS_PARAM = "authorization_details";
-    String AUTHORIZATION_DETAILS_RESPONSE_KEY = "authorization_details_response";
 }
 
 

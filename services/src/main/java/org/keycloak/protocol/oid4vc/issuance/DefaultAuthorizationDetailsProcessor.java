@@ -24,6 +24,12 @@ import org.keycloak.protocol.oid4vc.model.AuthorizationDetailResponse;
 import java.util.List;
 import java.util.Collections;
 
+/**
+ * Default implementation of {@link AuthorizationDetailsProcessor} that returns an empty list.
+ * This is a no-op implementation for standard RAR (Rich Authorization Requests).
+ *
+ * @author <a href="mailto:Forkim.Akwichek@adorsys.com">Forkim Akwichek</a>
+ */
 public class DefaultAuthorizationDetailsProcessor implements AuthorizationDetailsProcessor {
     @Override
     public List<AuthorizationDetailResponse> process(UserSessionModel userSession, ClientSessionContext clientSessionCtx) {

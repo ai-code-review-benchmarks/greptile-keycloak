@@ -37,7 +37,6 @@ import org.keycloak.protocol.oid4vc.model.Format;
 
 import static org.keycloak.protocol.oid4vc.model.Format.SUPPORTED_FORMATS;
 import static org.keycloak.OAuth2Constants.AUTHORIZATION_DETAILS_PARAM;
-import static org.keycloak.OAuth2Constants.AUTHORIZATION_DETAILS_RESPONSE_KEY;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +51,7 @@ public class OID4VCAuthorizationDetailsProcessor implements AuthorizationDetails
     private final Cors cors;
 
     public static final String OPENID_CREDENTIAL_TYPE = "openid_credential";
+    public static final String AUTHORIZATION_DETAILS_RESPONSE_KEY = "authorization_details_response";
 
     public OID4VCAuthorizationDetailsProcessor(KeycloakSession session, EventBuilder event, MultivaluedMap<String, String> formParams, Cors cors) {
         this.session = session;
@@ -71,9 +71,8 @@ public class OID4VCAuthorizationDetailsProcessor implements AuthorizationDetails
         Map<String, SupportedCredentialConfiguration> supportedCredentials = OID4VCIssuerWellKnownProvider.getSupportedCredentials(session);
         List<AuthorizationDetailResponse> authDetailsResponse = new ArrayList<>();
 
-        // Retrieve issuer metadata and identifier for locations check
-        CredentialIssuer issuerMetadata = (CredentialIssuer) new OID4VCIssuerWellKnownProvider(session).getConfig();
-        List<String> authorizationServers = issuerMetadata.getAuthorizationServers();
+        // Retrieve authorization servers and issuer identifier for locations check
+        List<String> authorizationServers = OID4VCIssuerWellKnownProvider.getAuthorizationServers(session);
         String issuerIdentifier = OID4VCIssuerWellKnownProvider.getIssuer(session.getContext());
 
         for (AuthorizationDetail detail : authDetails) {

@@ -84,7 +84,7 @@ public interface OAuth2GrantType extends Provider {
         protected Cors cors;
         protected Object tokenManager;
         protected String grantType;
-        public LoginProtocol protocol;
+        protected LoginProtocol protocol;
 
         public Context(KeycloakSession session, Object clientConfig, Map<String, String> clientAuthAttributes,
                 MultivaluedMap<String, String> formParams, EventBuilder event, Cors cors, Object tokenManager) {
@@ -118,6 +118,10 @@ public interface OAuth2GrantType extends Provider {
 
         public void setClientAuthAttributes(Map<String, String> clientAuthAttributes) {
             this.clientAuthAttributes = clientAuthAttributes;
+        }
+
+        public void setProtocol(LoginProtocol protocol) {
+            this.protocol = protocol;
         }
 
         public ClientModel getClient() {
