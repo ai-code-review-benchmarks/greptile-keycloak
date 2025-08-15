@@ -86,12 +86,12 @@ class ClientVaultTest {
         public RealmConfigBuilder configure(RealmConfigBuilder realm) {
             realm.addClient("myclient")
                     .publicClient(false)
-                    .directAccessGrants()
+                    .directAccessGrantsEnabled(true)
                     .secret("${vault.client_secret}");
 
             realm.addClient("myclient-with-invalid-vault-reference")
                     .publicClient(false)
-                    .directAccessGrants()
+                    .directAccessGrantsEnabled(true)
                     .secret("${vault.non_existing_client_secret}");
 
             realm.addUser("test-user@localhost")
