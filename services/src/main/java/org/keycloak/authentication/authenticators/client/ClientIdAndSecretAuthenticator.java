@@ -22,6 +22,7 @@ import org.keycloak.authentication.AuthenticationFlowError;
 import org.keycloak.authentication.ClientAuthenticationFlowContext;
 import org.keycloak.models.AuthenticationExecutionModel;
 import org.keycloak.models.ClientModel;
+import org.keycloak.models.KeycloakSession;
 import org.keycloak.protocol.oidc.OIDCClientSecretConfigWrapper;
 import org.keycloak.protocol.oidc.OIDCLoginProtocol;
 import org.keycloak.provider.ProviderConfigProperty;
@@ -182,10 +183,16 @@ public class ClientIdAndSecretAuthenticator extends AbstractClientAuthenticator 
     }
 
     @Override
-    public Map<String, Object> getAdapterConfiguration(ClientModel client) {
+    public Map<String, Object> getAdapterConfiguration(KeycloakSession session, ClientModel client) {
         Map<String, Object> result = new HashMap<>();
-        result.put(CredentialRepresentation.SECRET, client.getSecret());
+        String secret = client.getSecret();
+        result.put(CredentialRepresentation.SECRET, session.vault().getStringSecret(secret).get().orElse(secret));
         return result;
+    }
+
+    @Override
+    public Map<String, Object> getAdapterConfiguration(ClientModel client) {
+        throw new UnsupportedOperationException("Not implemented");
     }
 
     @Override
