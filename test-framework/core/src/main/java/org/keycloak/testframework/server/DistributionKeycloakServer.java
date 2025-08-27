@@ -18,7 +18,7 @@ public class DistributionKeycloakServer implements KeycloakServer {
     private static final boolean ENABLE_TLS = false;
     private static final boolean RE_CREATE = false;
     private static final boolean REMOVE_BUILD_OPTIONS_AFTER_BUILD = false;
-    private static final int REQUEST_PORT = 8080;
+    private int REQUEST_PORT = 8080;
 
     private RawKeycloakDistribution keycloak;
 
@@ -30,6 +30,7 @@ public class DistributionKeycloakServer implements KeycloakServer {
 
     @Override
     public void start(KeycloakServerConfigBuilder keycloakServerConfigBuilder) {
+        REQUEST_PORT = keycloakServerConfigBuilder.getHttpPort();
         keycloak = new RawKeycloakDistribution(false, MANUAL_STOP, ENABLE_TLS, RE_CREATE, REMOVE_BUILD_OPTIONS_AFTER_BUILD, REQUEST_PORT, new LoggingOutputConsumer());
 
         // RawKeycloakDistribution sets "DEBUG_SUSPEND", not "DEBUG" when debug is passed to constructor
@@ -55,7 +56,7 @@ public class DistributionKeycloakServer implements KeycloakServer {
 
     @Override
     public String getBaseUrl() {
-        return "http://localhost:8080";
+        return "http://localhost:" + REQUEST_PORT;
     }
 
     @Override
