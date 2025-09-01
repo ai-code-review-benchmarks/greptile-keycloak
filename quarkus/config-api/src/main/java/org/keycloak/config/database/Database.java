@@ -112,13 +112,17 @@ public final class Database {
                                     .append(separator)
                                     .append("${kc.data.dir:data}")
                                     .append(separator)
-                                    .append("h2")
+                                    .append(getFolder(namedProperty))
                                     .append(separator)
                                     .append(getDbName(namedProperty))
                                     .append(getProperty(DatabaseOptions.DB_URL_PROPERTIES, namedProperty))
                                     .toString());
                         }
                         return amendH2("jdbc:h2:mem:%s%s".formatted(getDbName(namedProperty), getProperty(DatabaseOptions.DB_URL_PROPERTIES, namedProperty)));
+                    }
+
+                    private String getFolder(String namedProperty) {
+                        return StringUtil.isNullOrEmpty(namedProperty) ? "h2" : "h2-%s".formatted(namedProperty);
                     }
 
                     private String getDbName(String namedProperty) {
@@ -188,6 +192,18 @@ public final class Database {
                         getProperty(DatabaseOptions.DB_URL_PROPERTIES, namedProperty)),
                 List.of("org.keycloak.connections.jpa.updater.liquibase.UpdatedMySqlDatabase")
         ),
+        TIDB("tidb",
+                "com.mysql.cj.jdbc.MysqlXADataSource",
+                "com.mysql.cj.jdbc.Driver",
+                "org.hibernate.community.dialect.TiDBDialect",
+                // default URL looks like this: "jdbc:mysql://${kc.db-url-host:localhost}:${kc.db-url-port:3306}/${kc.db-url-database:keycloak}${kc.db-url-properties:}"
+                (namedProperty, alias) -> "jdbc:mysql://%s:%s/%s%s".formatted(
+                        getProperty(DatabaseOptions.DB_URL_HOST, namedProperty, "localhost"),
+                        getProperty(DatabaseOptions.DB_URL_PORT, namedProperty, "3306"),
+                        getProperty(DatabaseOptions.DB_URL_DATABASE, namedProperty, "keycloak"),
+                        getProperty(DatabaseOptions.DB_URL_PROPERTIES, namedProperty)),
+                List.of("org.keycloak.connections.jpa.updater.liquibase.UpdatedMySqlDatabase")
+        ),
         MARIADB("mariadb",
                 "org.mariadb.jdbc.MariaDbDataSource",
                 "org.mariadb.jdbc.Driver",
@@ -210,7 +226,7 @@ public final class Database {
                         getProperty(DatabaseOptions.DB_URL_PORT, namedProperty, "5432"),
                         getProperty(DatabaseOptions.DB_URL_DATABASE, namedProperty, "keycloak"),
                         getProperty(DatabaseOptions.DB_URL_PROPERTIES, namedProperty)),
-                asList("org.keycloak.connections.jpa.updater.liquibase.UpdatedPostgresDatabase", "org.keycloak.connections.jpa.updater.liquibase.PostgresPlusDatabase"),
+                asList("liquibase.database.core.PostgresDatabase", "org.keycloak.connections.jpa.updater.liquibase.PostgresPlusDatabase"),
                 "postgres"
         ),
         MSSQL("mssql",
@@ -278,7 +294,7 @@ public final class Database {
 
         private static String getProperty(Option<?> option, String namedProperty, String defaultValue) {
             return "${kc.%s:%s}".formatted(StringUtil.isNullOrEmpty(namedProperty) ? option.getKey() :
-                            DatabaseOptions.getNamedKey(option, namedProperty).orElseThrow(() -> new IllegalArgumentException("Cannot find the named property")),
+                            DatabaseOptions.Datasources.getNamedKey(option, namedProperty).orElseThrow(() -> new IllegalArgumentException("Cannot find the named property")),
                     defaultValue);
         }
 
