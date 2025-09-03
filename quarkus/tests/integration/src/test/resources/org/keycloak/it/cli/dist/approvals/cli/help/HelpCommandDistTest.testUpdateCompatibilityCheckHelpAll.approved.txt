@@ -506,19 +506,18 @@ Logging:
                      PREVIEW. Enables exporting logs to a destination handling telemetry data
                        (OpenTelemetry Logs). Default: false.
 --log-export-endpoint <url>
-                     PREVIEW. Telemetry (OpenTelemetry) endpoint to connect to for Logs. If not
-                       given, the value is inherited from the 'telemetry-endpoint' option.
-                       Available only when export ('log-export-enabled') is enabled.
+                     PREVIEW. Telemetry (OpenTelemetry) endpoint to export logs to. If not given,
+                       the value is inherited from the 'telemetry-endpoint' option. Available only
+                       when export ('log-export-enabled') is enabled.
 --log-export-level <level>
-                     Most verbose log level for logs exported to the destination handling telemetry
-                       data (OpenTelemetry collector). For more information, check the Telemetry
-                       guide. Possible values are (case insensitive): off, fatal, error, warn,
-                       info, debug, trace, all. Default: all. Available only when export
-                       ('log-export-enabled') is enabled.
+                     The most verbose log level exported to the telemetry endpoint. For more
+                       information, check the Telemetry guide. Possible values are (case
+                       insensitive): off, fatal, error, warn, info, debug, trace, all. Default:
+                       all. Available only when export ('log-export-enabled') is enabled.
 --log-export-protocol <protocol>
-                     PREVIEW. Telemetry (OpenTelemetry) protocol used for the logging telemetry
-                       data. If not given, the value is inherited from the 'telemetry-protocol'
-                       option. Possible values are: grpc, http/protobuf. Available only when export
+                     PREVIEW. Telemetry (OpenTelemetry) protocol used for exporting logs. If not
+                       given, the value is inherited from the 'telemetry-protocol' option. Possible
+                       values are: grpc, http/protobuf. Available only when export
                        ('log-export-enabled') is enabled.
 --log-file <file>    Set the log file path and filename. Default: data/log/keycloak.log. Available
                        only when File log handler is activated.

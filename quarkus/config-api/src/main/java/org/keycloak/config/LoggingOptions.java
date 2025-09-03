@@ -342,18 +342,18 @@ public class LoggingOptions {
 
     public static final Option<String> LOG_EXPORT_ENDPOINT = new OptionBuilder<>("log-export-endpoint", String.class)
             .category(OptionCategory.LOGGING)
-            .description("PREVIEW. Telemetry (OpenTelemetry) endpoint to connect to for Logs. If not given, the value is inherited from the '%s' option.".formatted(TelemetryOptions.TELEMETRY_ENDPOINT.getKey()))
+            .description("PREVIEW. Telemetry (OpenTelemetry) endpoint to export logs to. If not given, the value is inherited from the '%s' option.".formatted(TelemetryOptions.TELEMETRY_ENDPOINT.getKey()))
             .build();
 
     public static final Option<String> LOG_EXPORT_PROTOCOL = new OptionBuilder<>("log-export-protocol", String.class)
             .category(OptionCategory.LOGGING)
-            .description("PREVIEW. Telemetry (OpenTelemetry) protocol used for the logging telemetry data. If not given, the value is inherited from the '%s' option.".formatted(TelemetryOptions.TELEMETRY_PROTOCOL.getKey()))
+            .description("PREVIEW. Telemetry (OpenTelemetry) protocol used for exporting logs. If not given, the value is inherited from the '%s' option.".formatted(TelemetryOptions.TELEMETRY_PROTOCOL.getKey()))
             .expectedValues("grpc", "http/protobuf")
             .build();
 
     public static final Option<LoggingOptions.Level> LOG_EXPORT_LEVEL = new OptionBuilder<>("log-export-level", LoggingOptions.Level.class)
             .category(OptionCategory.LOGGING)
-            .description("Most verbose log level for logs exported to the destination handling telemetry data (OpenTelemetry collector). For more information, check the Telemetry guide.")
+            .description("The most verbose log level exported to the telemetry endpoint. For more information, check the Telemetry guide.")
             .defaultValue(LoggingOptions.Level.ALL)
             .caseInsensitiveExpectedValues(true)
             .build();

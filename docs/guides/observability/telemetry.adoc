@@ -57,7 +57,7 @@ You can override the global OpenTelemetry settings via the Tracing options if yo
 
 == Logs
 
-WARNING: OpenTelemetry Logs is considered a *preview* and can be changed. Feedback is more than welcome.
+WARNING: OpenTelemetry Logs is considered a *preview* and can be changed.
 
 It is possible to export {project_name}'s logs to the OpenTelemetry collector and be managed by various logging backends that support OpenTelemetry.
 
