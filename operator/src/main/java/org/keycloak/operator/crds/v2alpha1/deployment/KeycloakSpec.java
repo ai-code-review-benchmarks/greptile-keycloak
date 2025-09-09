@@ -124,6 +124,11 @@ public class KeycloakSpec {
     @JsonPropertyDescription("In this section you can configure Keycloak's scheduling")
     private SchedulingSpec schedulingSpec;
 
+    @JsonProperty("importScheduling")
+    @JsonPropertyDescription("In this section you can configure import Job scheduling")
+    private SchedulingSpec importSchedulingSpec;
+
+
     @JsonProperty("bootstrapAdmin")
     @JsonPropertyDescription("In this section you can configure Keycloak's bootstrap admin - will be used only for initial cluster creation.")
     private BootstrapAdminSpec bootstrapAdminSpec;
@@ -359,5 +364,13 @@ public class KeycloakSpec {
 
     public void setStartupProbeSpec(ProbeSpec startupProbeSpec) {
         this.startupProbeSpec = startupProbeSpec;
+    }
+
+    public SchedulingSpec getImportSchedulingSpec() {
+        return importSchedulingSpec;
+    }
+
+    public void setImportSchedulingSpec(SchedulingSpec importSchedulingSpec) {
+        this.importSchedulingSpec = importSchedulingSpec;
     }
 }
