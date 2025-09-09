@@ -503,6 +503,48 @@ public class UserSessionPersisterProviderTest extends KeycloakModelTest {
     }
 
     @Test
+    public void testConcurrentSessionCreation() {
+        String userSessionId = withRealm(realmId, (session, realm) -> {
+            UserModel user = session.users().getUserByUsername(realm, "user1");
+            UserSessionModel userSession = session.sessions().createUserSession(null, realm, user, "user1", "127.0.0.1", "form", true, null, null, UserSessionModel.SessionPersistenceState.PERSISTENT);
+            userSession.setNote("ITERATION1", "true");
+            return userSession.getId();
+        });
+
+        // Simulate a concurrently created session
+        withRealm(realmId, (session, realm) -> {
+            UserModel user = session.users().getUserByUsername(realm, "user1");
+            UserSessionModel userSession = session.sessions().createUserSession(userSessionId, realm, user, "user1", "127.0.0.1", "form", true, null, null, UserSessionModel.SessionPersistenceState.PERSISTENT);
+            userSession.setNote("ITERATION2", "true");
+            return null;
+        });
+
+        withRealm(realmId, (session, realm) -> {
+            UserSessionModel userSession = session.sessions().getUserSession(realm, userSessionId);
+            assertThat(userSession.getNote("ITERATION1"), Matchers.equalTo("true"));
+            assertThat(userSession.getNote("ITERATION2"), Matchers.equalTo("true"));
+            return null;
+        });
+
+        if (MultiSiteUtils.isPersistentSessionsEnabled()) {
+            try {
+                // Simulate a concurrently created session with a different user
+                withRealm(realmId, (session, realm) -> {
+                    UserModel user = session.users().getUserByUsername(realm, "user2");
+                    UserSessionModel userSession = session.sessions().createUserSession(userSessionId, realm, user, "user1", "127.0.0.1", "form", true, null, null, UserSessionModel.SessionPersistenceState.PERSISTENT);
+                    userSession.setNote("ITERATION2", "true");
+                    return null;
+                });
+                Assert.fail("Exception expected");
+            } catch (RuntimeException e) {
+                assertThat(e.getMessage(), Matchers.containsString("Maximum number of retries reached"));
+                assertThat(e.getCause().getMessage(), Matchers.containsString("User ID of the session does not match"));
+            }
+        }
+
+    }
+
+    @Test
     public void testExpiredSessions() {
         int started = Time.currentTime();
         final UserSessionModel[] userSession1 = {null};
