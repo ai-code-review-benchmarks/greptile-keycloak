@@ -51,6 +51,7 @@ public class OID4VCTargetRoleMapper extends OID4VCMapper {
     private static final Logger LOGGER = Logger.getLogger(OID4VCTargetRoleMapper.class);
 
     public static final String DEFAULT_CLAIM_NAME = "roles";
+	public static final String CLIENT_CONFIG_KEY = "clientId";
     public static final String MAPPER_ID = "oid4vc-target-role-mapper";
 
     private static final List<ProviderConfigProperty> CONFIG_PROPERTIES = new ArrayList<>();
@@ -63,6 +64,13 @@ public class OID4VCTargetRoleMapper extends OID4VCMapper {
         subjectPropertyNameConfig.setDefaultValue("roles");
         subjectPropertyNameConfig.setType(ProviderConfigProperty.STRING_TYPE);
         CONFIG_PROPERTIES.add(subjectPropertyNameConfig);
+
+		ProviderConfigProperty clientIdPropertyNameConfig = new ProviderConfigProperty();
+		subjectPropertyNameConfig.setName(CLIENT_CONFIG_KEY);
+		subjectPropertyNameConfig.setLabel("Client ID");
+		subjectPropertyNameConfig.setHelpText("Property to configure the client to get the roles from.");
+		subjectPropertyNameConfig.setType(ProviderConfigProperty.STRING_TYPE);
+		CONFIG_PROPERTIES.add(clientIdPropertyNameConfig);
     }
 
     private final KeycloakSession keycloakSession;
@@ -129,9 +137,10 @@ public class OID4VCTargetRoleMapper extends OID4VCMapper {
                                     UserSessionModel userSessionModel) {
         List<String> attributePath = getMetadataAttributePath();
         String propertyName = attributePath.get(attributePath.size() - 1);
-        ClientModel clientModel = keycloakSession.getContext().getClient();
+		String client = mapperModel.getConfig().get(CLIENT_CONFIG_KEY);
+		ClientModel clientModel = userSessionModel.getRealm().getClientByClientId(client);
         if (clientModel == null) {
-            LOGGER.warnf("Client %s not found.", clientModel.getClientId());
+            LOGGER.warnf("Client %s not found.", client);
             return;
         }
 
