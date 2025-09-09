@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Red Hat, Inc. and/or its affiliates
+ * Copyright 2025 Red Hat, Inc. and/or its affiliates
  * and other contributors as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,18 +15,13 @@
  * limitations under the License.
  */
 
-package org.keycloak.models.sessions.infinispan.changes;
+package org.keycloak.models.sessions.infinispan.transaction;
 
-import org.keycloak.models.sessions.infinispan.entities.SessionEntity;
+import org.keycloak.models.KeycloakSession;
 
-import java.util.Map;
+@FunctionalInterface
+public interface DatabaseUpdate {
 
-public interface SessionChangesPerformer<K, V extends SessionEntity> {
-    default boolean shouldConsumeChange(V entity) {
-        return true;
-    }
+    void write(KeycloakSession session);
 
-    void registerChange(Map.Entry<K, SessionUpdatesList<V>> entry, MergedUpdate<V> merged);
-
-    void applyChanges();
 }
