@@ -15,9 +15,11 @@ public class EmbeddedKeycloakServer implements KeycloakServer {
 
     private Keycloak keycloak;
     private Path homeDir;
+    private int httpPort = 8080;
 
     @Override
     public void start(KeycloakServerConfigBuilder keycloakServerConfigBuilder) {
+        httpPort = keycloakServerConfigBuilder.getHttpPort();
         Keycloak.Builder builder = Keycloak.builder().setVersion(Version.VERSION);
 
         for(Dependency dependency : keycloakServerConfigBuilder.toDependencies()) {
@@ -61,7 +63,7 @@ public class EmbeddedKeycloakServer implements KeycloakServer {
 
     @Override
     public String getBaseUrl() {
-        return "http://localhost:8080";
+        return "http://localhost:" + httpPort;
     }
 
     @Override

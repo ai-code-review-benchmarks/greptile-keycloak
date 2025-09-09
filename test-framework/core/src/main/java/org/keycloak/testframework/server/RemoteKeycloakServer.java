@@ -10,8 +10,11 @@ import java.util.concurrent.TimeUnit;
 
 public class RemoteKeycloakServer implements KeycloakServer {
 
+    private int httpPort = 8080;
+
     @Override
     public void start(KeycloakServerConfigBuilder keycloakServerConfigBuilder) {
+        httpPort = keycloakServerConfigBuilder.getHttpPort();
         if (!verifyRunningKeycloak()) {
             printStartupInstructions(keycloakServerConfigBuilder);
             waitForStartup();
@@ -24,7 +27,7 @@ public class RemoteKeycloakServer implements KeycloakServer {
 
     @Override
     public String getBaseUrl() {
-        return "http://localhost:8080";
+        return "http://localhost:" + httpPort;
     }
 
     @Override
