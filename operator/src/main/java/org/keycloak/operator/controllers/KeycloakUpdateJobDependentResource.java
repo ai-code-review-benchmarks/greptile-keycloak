@@ -128,7 +128,8 @@ public class KeycloakUpdateJobDependentResource extends CRUDKubernetesDependentR
         podTemplate.withMetadata(createMetadata(podName(keycloak), keycloak));
         PodSpec podSpec = createPodSpec(context);
         KeycloakRealmImportJobDependentResource.handleJobScheduling(
-                Optional.ofNullable(keycloak.getSpec().getUpdateSpec()).map(UpdateSpec::getSchedulingSpec).orElse(null),
+                keycloak,
+                Optional.ofNullable(keycloak.getSpec().getUpdateSpec()).map(UpdateSpec::getSchedulingSpec),
                 podSpec);
         podTemplate.withSpec(podSpec);
         podTemplate.endTemplate();

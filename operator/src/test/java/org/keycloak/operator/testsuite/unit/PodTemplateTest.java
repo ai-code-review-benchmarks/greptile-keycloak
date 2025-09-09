@@ -50,6 +50,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.keycloak.operator.Config;
 import org.keycloak.operator.Constants;
+import org.keycloak.operator.ContextUtils;
 import org.keycloak.operator.Utils;
 import org.keycloak.operator.controllers.KeycloakDeploymentDependentResource;
 import org.keycloak.operator.controllers.KeycloakDistConfigurator;
@@ -769,6 +770,8 @@ public class PodTemplateTest {
         StatefulSet existingStatefulSet = existingBuilder.build();
 
         Context context = mockContext(existingStatefulSet);
+        var kc = createKeycloak(null, keycloakSpec);
+        Mockito.when(context.managedWorkflowAndDependentResourceContext().getMandatory(ContextUtils.KEYCLOAK, Keycloak.class)).thenReturn(kc);
 
         var builder = new KeycloakRealmImportBuilder();
         RealmRepresentation rep = new RealmRepresentation();
@@ -780,6 +783,28 @@ public class PodTemplateTest {
         realmImport.setSpec(specBuilder.build());
 
         return importJobResource.desired(realmImport, context);
+    }
+
+    @Test
+    public void testUpdateJobSchedulingDefault() {
+        Consumer<KeycloakSpecBuilder> addJobScheduling = builder -> {};
+
+        Job job = getUpdateJob(addJobScheduling, addJobScheduling, builder -> {});
+
+        // nothing should be set
+        assertNull(job.getSpec().getTemplate().getSpec().getTopologySpreadConstraints());
+        assertNull(job.getSpec().getTemplate().getSpec().getAffinity());
+    }
+
+    @Test
+    public void testUpdateJobSchedulingInherited() {
+        Consumer<KeycloakSpecBuilder> addJobScheduling = builder -> {
+            builder.editOrNewSchedulingSpec().withPriorityClassName("priority").endSchedulingSpec();
+        };
+
+        Job job = getUpdateJob(addJobScheduling, addJobScheduling, builder -> {});
+
+        assertEquals("priority", job.getSpec().getTemplate().getSpec().getPriorityClassName());
     }
 
     @Test
@@ -796,8 +821,10 @@ public class PodTemplateTest {
     @Test
     public void testRealmImportJobSchedulingOverride() {
         Job job = getImportJob(
-                builder -> builder.editOrNewSchedulingSpec().addNewToleration("NoSchedule", "key", "value", 10L, "in").endSchedulingSpec(),
-                builder -> builder.withNewSchedulingSpec().addNewToleration("NoSchedule", "key1", "value1", 10L, "in").endSchedulingSpec(),
+                builder -> builder.editOrNewSchedulingSpec().addNewToleration("NoSchedule", "key", "value", 10L, "in")
+                        .endSchedulingSpec().withNewImportSchedulingSpec()
+                        .addNewToleration("NoSchedule", "key1", "value1", 10L, "in").endImportSchedulingSpec(),
+                builder -> {},
                 builder -> {});
         assertEquals("---\n"
                 + "effect: \"NoSchedule\"\n"

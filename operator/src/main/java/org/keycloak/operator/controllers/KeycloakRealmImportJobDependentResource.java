@@ -36,12 +36,14 @@ import io.javaoperatorsdk.operator.processing.dependent.kubernetes.KubernetesDep
 import org.keycloak.operator.Config;
 import org.keycloak.operator.ContextUtils;
 import org.keycloak.operator.Utils;
+import org.keycloak.operator.crds.v2alpha1.deployment.Keycloak;
 import org.keycloak.operator.crds.v2alpha1.deployment.spec.SchedulingSpec;
 import org.keycloak.operator.crds.v2alpha1.realmimport.KeycloakRealmImport;
 import org.keycloak.operator.crds.v2alpha1.realmimport.Placeholder;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.keycloak.operator.Utils.addResources;
@@ -76,7 +78,8 @@ public class KeycloakRealmImportJobDependentResource extends KubernetesDependent
         // The Job should not be selected with app=keycloak
         labels.put("app", "keycloak-realm-import");
 
-        handleJobScheduling(primary.getSpec().getSchedulingSpec(), keycloakPodTemplate.getSpec());
+        var kc = ContextUtils.getKeycloak(context);
+        handleJobScheduling(kc, Optional.ofNullable(kc.getSpec().getImportSchedulingSpec()), keycloakPodTemplate.getSpec());
 
         var envvars = keycloakPodTemplate
                 .getSpec()
@@ -167,12 +170,13 @@ public class KeycloakRealmImportJobDependentResource extends KubernetesDependent
         addResources(keycloakRealmImport.getSpec().getResourceRequirements(), config, keycloakContainer);
     }
 
-    static void handleJobScheduling(SchedulingSpec schedulingSpec, PodSpec spec) {
-        if (schedulingSpec != null) {
-            spec.setPriorityClassName(schedulingSpec.getPriorityClassName());
-            spec.setAffinity(schedulingSpec.getAffinity());
-            spec.setTolerations(schedulingSpec.getTolerations());
-            spec.setTopologySpreadConstraints(schedulingSpec.getTopologySpreadConstraints());
+    static void handleJobScheduling(Keycloak keycloak, Optional<SchedulingSpec> schedulingSpec, PodSpec spec) {
+        if (schedulingSpec.isPresent() || keycloak.getSpec().getSchedulingSpec() == null) {
+            spec.setPriorityClassName(schedulingSpec.map(SchedulingSpec::getPriorityClassName).orElse(null));
+            spec.setAffinity(schedulingSpec.map(SchedulingSpec::getAffinity).orElse(null));
+            spec.setTolerations(schedulingSpec.map(SchedulingSpec::getTolerations).orElse(null));
+            spec.setTopologySpreadConstraints(schedulingSpec.map(SchedulingSpec::getTopologySpreadConstraints).orElse(null));
         }
+        // else use the parent values
     }
 }
