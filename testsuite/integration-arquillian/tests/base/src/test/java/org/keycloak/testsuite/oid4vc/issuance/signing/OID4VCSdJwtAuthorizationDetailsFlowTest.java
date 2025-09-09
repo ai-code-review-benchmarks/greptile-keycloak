@@ -29,7 +29,7 @@ import org.apache.http.message.BasicNameValuePair;
 import org.junit.Test;
 import org.keycloak.OAuth2Constants;
 import org.keycloak.protocol.oid4vc.model.AuthorizationDetail;
-import org.keycloak.protocol.oid4vc.model.AuthorizationDetailResponse;
+import org.keycloak.protocol.oid4vc.issuance.OID4VCAuthorizationDetailsResponse;
 import org.keycloak.protocol.oid4vc.model.CredentialIssuer;
 import org.keycloak.protocol.oid4vc.model.CredentialOfferURI;
 import org.keycloak.protocol.oid4vc.model.CredentialsOffer;
@@ -124,10 +124,10 @@ public class OID4VCSdJwtAuthorizationDetailsFlowTest extends OID4VCSdJwtIssuingE
         try (CloseableHttpResponse tokenResponse = httpClient.execute(postPreAuthorizedCode)) {
             assertEquals(HttpStatus.SC_OK, tokenResponse.getStatusLine().getStatusCode());
             String responseBody = IOUtils.toString(tokenResponse.getEntity().getContent(), StandardCharsets.UTF_8);
-            List<AuthorizationDetailResponse> authDetailsResponse = parseAuthorizationDetails(responseBody);
+            List<OID4VCAuthorizationDetailsResponse> authDetailsResponse = parseAuthorizationDetails(responseBody);
             assertNotNull("authorization_details should be present in the response", authDetailsResponse);
             assertEquals(1, authDetailsResponse.size());
-            AuthorizationDetailResponse authDetailResponse = authDetailsResponse.get(0);
+            OID4VCAuthorizationDetailsResponse authDetailResponse = authDetailsResponse.get(0);
             assertEquals(OPENID_CREDENTIAL_TYPE, authDetailResponse.getType());
             assertEquals(SD_JWT_VC, authDetailResponse.getFormat());
             assertNotNull(authDetailResponse.getCredentialIdentifiers());
@@ -231,9 +231,9 @@ public class OID4VCSdJwtAuthorizationDetailsFlowTest extends OID4VCSdJwtIssuingE
         try (CloseableHttpResponse tokenResponse = httpClient.execute(tokenRequest)) {
             String tokenResponseBody = IOUtils.toString(tokenResponse.getEntity().getContent(), StandardCharsets.UTF_8);
             assertEquals(HttpStatus.SC_OK, tokenResponse.getStatusLine().getStatusCode());
-            List<AuthorizationDetailResponse> authDetailsResponse = parseAuthorizationDetails(tokenResponseBody);
+            List<OID4VCAuthorizationDetailsResponse> authDetailsResponse = parseAuthorizationDetails(tokenResponseBody);
             assertEquals(1, authDetailsResponse.size());
-            AuthorizationDetailResponse authDetailResponse = authDetailsResponse.get(0);
+            OID4VCAuthorizationDetailsResponse authDetailResponse = authDetailsResponse.get(0);
             assertEquals(OPENID_CREDENTIAL_TYPE, authDetailResponse.getType());
             assertEquals(SD_JWT_VC, authDetailResponse.getFormat());
             assertNotNull(authDetailResponse.getCredentialIdentifiers());

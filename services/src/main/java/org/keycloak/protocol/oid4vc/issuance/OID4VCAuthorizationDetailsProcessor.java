@@ -18,25 +18,18 @@
 package org.keycloak.protocol.oid4vc.issuance;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import jakarta.ws.rs.core.MultivaluedMap;
-import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
-import org.keycloak.events.Errors;
-import org.keycloak.events.EventBuilder;
 import org.keycloak.models.ClientSessionContext;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.UserSessionModel;
 import org.keycloak.protocol.oid4vc.model.AuthorizationDetail;
-import org.keycloak.protocol.oid4vc.model.AuthorizationDetailResponse;
-import org.keycloak.protocol.oid4vc.model.CredentialIssuer;
 import org.keycloak.protocol.oid4vc.model.SupportedCredentialConfiguration;
-import org.keycloak.services.CorsErrorResponseException;
-import org.keycloak.services.cors.Cors;
+import org.keycloak.protocol.oidc.rar.AuthorizationDetailsProcessor;
+import org.keycloak.protocol.oidc.rar.AuthorizationDetailsResponse;
 import org.keycloak.util.JsonSerialization;
 import org.keycloak.protocol.oid4vc.model.Format;
 
 import static org.keycloak.protocol.oid4vc.model.Format.SUPPORTED_FORMATS;
-import static org.keycloak.OAuth2Constants.AUTHORIZATION_DETAILS_PARAM;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,30 +39,28 @@ import java.util.UUID;
 public class OID4VCAuthorizationDetailsProcessor implements AuthorizationDetailsProcessor {
     private static final Logger logger = Logger.getLogger(OID4VCAuthorizationDetailsProcessor.class);
     private final KeycloakSession session;
-    private final EventBuilder event;
-    private final MultivaluedMap<String, String> formParams;
-    private final Cors cors;
 
     public static final String OPENID_CREDENTIAL_TYPE = "openid_credential";
-    public static final String AUTHORIZATION_DETAILS_RESPONSE_KEY = "authorization_details_response";
 
-    public OID4VCAuthorizationDetailsProcessor(KeycloakSession session, EventBuilder event, MultivaluedMap<String, String> formParams, Cors cors) {
+    public OID4VCAuthorizationDetailsProcessor(KeycloakSession session) {
         this.session = session;
-        this.event = event;
-        this.formParams = formParams;
-        this.cors = cors;
     }
 
-    public List<AuthorizationDetailResponse> process(UserSessionModel userSession, ClientSessionContext clientSessionCtx) {
-        String authorizationDetailsParam = formParams.getFirst(AUTHORIZATION_DETAILS_PARAM);
-        if (authorizationDetailsParam == null) {
+    @Override
+    public List<AuthorizationDetailsResponse> process(UserSessionModel userSession, ClientSessionContext clientSessionCtx, String authorizationDetailsParameter) {
+        if (authorizationDetailsParameter == null) {
             return null; // authorization_details is optional
         }
 
-        List<AuthorizationDetail> authDetails = parseAuthorizationDetails(authorizationDetailsParam);
+        // Check if this processor can handle the authorization details parameter
+        if (!canProcess(authorizationDetailsParameter)) {
+            return null;
+        }
+
+        List<AuthorizationDetail> authDetails = parseAuthorizationDetails(authorizationDetailsParameter);
         List<String> supportedFormats = new ArrayList<>(SUPPORTED_FORMATS);
         Map<String, SupportedCredentialConfiguration> supportedCredentials = OID4VCIssuerWellKnownProvider.getSupportedCredentials(session);
-        List<AuthorizationDetailResponse> authDetailsResponse = new ArrayList<>();
+        List<AuthorizationDetailsResponse> authDetailsResponse = new ArrayList<>();
 
         // Retrieve authorization servers and issuer identifier for locations check
         List<String> authorizationServers = OID4VCIssuerWellKnownProvider.getAuthorizationServers(session);
@@ -77,11 +68,25 @@ public class OID4VCAuthorizationDetailsProcessor implements AuthorizationDetails
 
         for (AuthorizationDetail detail : authDetails) {
             validateAuthorizationDetail(detail, supportedFormats, supportedCredentials, authorizationServers, issuerIdentifier);
-            AuthorizationDetailResponse responseDetail = buildAuthorizationDetailResponse(detail, userSession, supportedCredentials, supportedFormats, clientSessionCtx);
+            AuthorizationDetailsResponse responseDetail = buildAuthorizationDetailResponse(detail, userSession, supportedCredentials, supportedFormats, clientSessionCtx);
             authDetailsResponse.add(responseDetail);
         }
 
         return authDetailsResponse;
+    }
+
+    private boolean canProcess(String authorizationDetailsParameter) {
+        try {
+            List<AuthorizationDetail> authDetails = parseAuthorizationDetails(authorizationDetailsParameter);
+            for (AuthorizationDetail detail : authDetails) {
+                if (OPENID_CREDENTIAL_TYPE.equals(detail.getType())) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            logger.debugf(e, "Failed to parse authorization_details for OID4VCI: %s", authorizationDetailsParameter);
+        }
+        return false;
     }
 
     private List<AuthorizationDetail> parseAuthorizationDetails(String authorizationDetailsParam) {
@@ -95,8 +100,7 @@ public class OID4VCAuthorizationDetailsProcessor implements AuthorizationDetails
     }
 
     private RuntimeException getInvalidRequestException(String errorDescription) {
-        event.error(Errors.INVALID_REQUEST);
-        return new CorsErrorResponseException(cors, "invalid_request", errorDescription, Response.Status.BAD_REQUEST);
+        return new RuntimeException("Invalid authorization_details: " + errorDescription);
     }
 
     private void validateAuthorizationDetail(AuthorizationDetail detail, List<String> supportedFormats, Map<String, SupportedCredentialConfiguration> supportedCredentials, List<String> authorizationServers, String issuerIdentifier) {
@@ -160,20 +164,23 @@ public class OID4VCAuthorizationDetailsProcessor implements AuthorizationDetails
         }
     }
 
-    private AuthorizationDetailResponse buildAuthorizationDetailResponse(AuthorizationDetail detail, UserSessionModel userSession, Map<String, SupportedCredentialConfiguration> supportedCredentials, List<String> supportedFormats, ClientSessionContext clientSessionCtx) {
+    private AuthorizationDetailsResponse buildAuthorizationDetailResponse(AuthorizationDetail detail, UserSessionModel userSession, Map<String, SupportedCredentialConfiguration> supportedCredentials, List<String> supportedFormats, ClientSessionContext clientSessionCtx) {
         String credentialConfigurationId = detail.getCredentialConfigurationId();
         String format = detail.getFormat();
         Object vct = detail.getAdditionalFields().get("vct");
 
         // Try to reuse identifier from authorizationDetailsResponse in client session context
-        List<AuthorizationDetailResponse> previousResponses = clientSessionCtx.getAttribute(AUTHORIZATION_DETAILS_RESPONSE_KEY, List.class);
+        List<AuthorizationDetailsResponse> previousResponses = clientSessionCtx.getAttribute("authorization_details_response", List.class);
         List<String> credentialIdentifiers = null;
         if (previousResponses != null) {
-            for (AuthorizationDetailResponse prev : previousResponses) {
-                if ((credentialConfigurationId != null && credentialConfigurationId.equals(prev.getCredentialConfigurationId())) ||
-                        (credentialConfigurationId == null && format != null && format.equals(prev.getFormat()))) {
-                    credentialIdentifiers = prev.getCredentialIdentifiers();
-                    break;
+            for (AuthorizationDetailsResponse prev : previousResponses) {
+                if (prev instanceof OID4VCAuthorizationDetailsResponse) {
+                    OID4VCAuthorizationDetailsResponse oid4vcPrev = (OID4VCAuthorizationDetailsResponse) prev;
+                    if ((credentialConfigurationId != null && credentialConfigurationId.equals(oid4vcPrev.getCredentialConfigurationId())) ||
+                            (credentialConfigurationId == null && format != null && format.equals(oid4vcPrev.getFormat()))) {
+                        credentialIdentifiers = oid4vcPrev.getCredentialIdentifiers();
+                        break;
+                    }
                 }
             }
         }
@@ -182,7 +189,7 @@ public class OID4VCAuthorizationDetailsProcessor implements AuthorizationDetails
             credentialIdentifiers.add(UUID.randomUUID().toString());
         }
 
-        AuthorizationDetailResponse responseDetail = new AuthorizationDetailResponse();
+        OID4VCAuthorizationDetailsResponse responseDetail = new OID4VCAuthorizationDetailsResponse();
         responseDetail.setType(OPENID_CREDENTIAL_TYPE);
         responseDetail.setCredentialIdentifiers(credentialIdentifiers);
         if (credentialConfigurationId != null) {
@@ -190,9 +197,14 @@ public class OID4VCAuthorizationDetailsProcessor implements AuthorizationDetails
         } else {
             responseDetail.setFormat(format);
             if (Format.SD_JWT_VC.equals(format) && vct != null) {
-                responseDetail.getAdditionalFields().put("vct", vct);
+                responseDetail.getOtherClaims().put("vct", vct);
             }
         }
         return responseDetail;
     }
-} 
+
+    @Override
+    public void close() {
+        // No cleanup needed
+    }
+}

@@ -145,8 +145,7 @@ public class TokenEndpoint {
         DPoPUtil.handleDPoPHeader(session, event, cors, clientConfig);
 
         OAuth2GrantType.Context context = new OAuth2GrantType.Context(session, clientConfig, clientAuthAttributes,
-                                                                      formParams, event, cors, tokenManager);
-        context.setProtocol(new OIDCLoginProtocol(session, realm, session.getContext().getUri(), headers, event));
+                formParams, event, cors, tokenManager);
         return grant.process(context);
     }
 
