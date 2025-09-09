@@ -194,11 +194,11 @@ public abstract class AbstractOAuth2IdentityProvider<C extends OAuth2IdentityPro
             this.token = token;
         }
 
-        public long getExpiresIn() {
+        public Long getExpiresIn() {
             return expiresIn;
         }
 
-        public void setExpiresIn(long expiresIn) {
+        public void setExpiresIn(Long expiresIn) {
             this.expiresIn = expiresIn;
         }
 
@@ -210,11 +210,11 @@ public abstract class AbstractOAuth2IdentityProvider<C extends OAuth2IdentityPro
             this.refreshToken = refreshToken;
         }
 
-        public long getRefreshExpiresIn() {
+        public Long getRefreshExpiresIn() {
             return refreshExpiresIn;
         }
 
-        public void setRefreshExpiresIn(long refreshExpiresIn) {
+        public void setRefreshExpiresIn(Long refreshExpiresIn) {
             this.refreshExpiresIn = refreshExpiresIn;
         }
 
@@ -297,6 +297,8 @@ public abstract class AbstractOAuth2IdentityProvider<C extends OAuth2IdentityPro
 
                 if (newResponse.getRefreshToken() == null && previousResponse.getRefreshToken() != null) {
                     newResponse.setRefreshToken(previousResponse.getRefreshToken());
+                }
+                if (newResponse.getRefreshExpiresIn() == null && previousResponse.getRefreshExpiresIn() != null) {
                     newResponse.setRefreshExpiresIn(previousResponse.getRefreshExpiresIn());
                 }
                 if (newResponse.getIdToken() == null && previousResponse.getIdToken() != null) {
