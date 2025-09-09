@@ -466,6 +466,10 @@ public class UserSessionPersisterProviderTest extends KeycloakModelTest {
                 setTimeOffset(i);
 
                 UserSessionModel userSession = session.sessions().createUserSession(null, realm, user, "user1", "127.0.0.1", "form", true, null, null, UserSessionModel.SessionPersistenceState.PERSISTENT);
+                if (userSessionsInner.contains(userSession.getId())) {
+                    Assert.fail("Duplicate session id generated: " + userSession.getId());
+                }
+
                 createClientSession(session, realmId, realm.getClientByClientId("test-app"), userSession, "http://redirect", "state");
                 userSessionsInner.add(userSession.getId());
             }
